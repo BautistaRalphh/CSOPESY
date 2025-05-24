@@ -9,7 +9,7 @@
 
 using namespace std;
 
-struct Screen {
+struct Process {
     string processName;
     int currentInstructionLine;
     int totalInstructionLines;
@@ -28,6 +28,14 @@ void displayHeader() {
     cout << endl;
 }
 
+void displayScreenCommands() {
+    cout << "The following are the available process commands:" << endl;
+    cout << "  process -ls       : List all processes" << endl;
+    cout << "  process -s <name> : Create a new process" << endl;
+    cout << "  process -r <name> : Display an existing process" << endl;
+    cout << endl;
+}
+
 string getCurrentTimestamp() {
     time_t now = time(0);
     struct tm tstruct;
@@ -37,75 +45,105 @@ string getCurrentTimestamp() {
     return buf;
 }
 
-void displayScreen(const Screen& screen) {
-    cout << "Process Name: " << screen.processName << endl;
-    cout << "Instruction: " << screen.currentInstructionLine << " / " << screen.totalInstructionLines << endl;
-    cout << "Creation Time: " << screen.creationTime << endl;
+void displayProcess(const Process& process) {
+    cout << "Process Name: " << process.processName << endl;
+    cout << "Instruction: " << process.currentInstructionLine << " / " << process.totalInstructionLines << endl;
+    cout << "Creation Time: " << process.creationTime << endl;
+    cout << "Type 'exit' to return to main menu" << endl;
 }
 
-string parseScreenName(const string& command) {
-    regex screen_regex(R"(^screen\s+(-r|-s)\s+(\w+)$)");
+string parseProcessName(const string& command) {
+    regex process_regex(R"(^screen\s+(-r|-s)\s+(\w+)$)");
     smatch match;
-    if (regex_match(command, match, screen_regex) && match.size() == 3) {
-        return match[2].str();
+    if (regex_match(command, match, process_regex) && match.size() == 3) {
+        return match[2].str(); 
     }
     return "";
 }
 
-void createScreen(map<string, Screen>& screens, const string& command) {
-    string name = parseScreenName(command);
+bool createProcess(map<string, Process>& processes, const string& command, string& createdProcessName) {
+    string name = parseProcessName(command); 
     if (!name.empty() && regex_match(command, regex(R"(^screen\s+-s\s+\w+$)"))) {
-        Screen newScreen;
-        newScreen.processName = name;
-        newScreen.currentInstructionLine = 10;  // Placeholder
-        newScreen.totalInstructionLines = 100; // Placeholder
-        newScreen.creationTime = getCurrentTimestamp();
-        screens[name] = newScreen;
-        cout << "Screen '" << name << "' created." << endl;
+        if (processes.count(name)) { 
+            cout << "Error: Process '" << name << "' already exists." << endl;
+            return false;
+        }
+        Process newProcess; 
+        newProcess.processName = name;
+        newProcess.currentInstructionLine = 10;  // Placeholder
+        newProcess.totalInstructionLines = 100; // Placeholder
+        newProcess.creationTime = getCurrentTimestamp();
+        processes[name] = newProcess; 
+        cout << "Process '" << name << "' created." << endl;
+        createdProcessName = name; 
+        return true;
     } else {
-        cout << "Invalid screen create command. Use 'screen -s <name>'" << endl;
+        cout << "Invalid process create command. Use 'screen -s <name>'" << endl;
+        return false;
     }
 }
 
 int main() {
     //Variables
-    map<string, Screen> screens;
+    map<string, Process> processes;
     string command;
 
     displayHeader();
 
     while (true) {
-        cout << "Enter command: "; 
+        cout << "Enter a command: ";
         getline(cin, command);
 
-        regex screen_regex(R"(^screen\s+(-r|-s)\s+(\w+)$)");
+        regex process_command_regex(R"(^screen\s+(-r|-s)\s+(\w+)$)");
         smatch match;
 
-         if (command == "initialize") {
+        if (command == "initialize") {
             cout << "'initialize' command recognized. Doing something." << endl;
-        } else if (regex_match(command, match, screen_regex)) {
-            string option = match[1].str();
-            string screenName = match[2].str();
+        }  else if (command == "screen") { 
+            displayScreenCommands();
+        }  else if (regex_match(command, match, process_command_regex)) {
+            string option = match[1].str();    
+            string processName = match[2].str();
 
             if (option == "-r") {
-                if (screens.count(screenName)) {
-                    displayScreen(screens[screenName]);
+                if (processes.count(processName)) {
+                    cout << "\033[2J\033[1;1H";
+                    displayProcess(processes[processName]); 
+                    string process_cmd;
                     while (true) {
-                        cout << "Screen:\\> ";
-                        getline(cin, command);
-                        if (command == "exit") {
+                        cout << endl;
+                        cout << "root:\\> "; 
+                        getline(cin, process_cmd);
+                        if (process_cmd == "exit") {
+                            cout << "\033[2J\033[1;1H";
                             break;
                         } else {
-                            cout << "Unknown screen command: " << command << endl;
+                            cout << "Unknown process command: " << process_cmd << endl; 
                         }
                     }
                 } else {
-                    cout << "Screen '" << screenName << "' not found." << endl;
+                    cout << "Process '" << processName << "' not found." << endl;
                 }
             } else if (option == "-s") {
-                createScreen(screens, command);
+                string createdProcess;
+                if (createProcess(processes, command, createdProcess)) {
+                    cout << "\033[2J\033[1;1H";
+                    displayProcess(processes[createdProcess]);
+                    string process_cmd;
+                    while (true) {
+                        cout << endl;
+                        cout << "root:\\> "; 
+                        getline(cin, process_cmd);
+                        if (process_cmd == "exit") {
+                            cout << "\033[2J\033[1;1H";
+                            break;
+                        } else {
+                            cout << "Unknown process command: " << process_cmd << endl; 
+                        }
+                    }
+                }
             } else {
-                cout << "Invalid screen option." << endl;
+                cout << "Invalid screen option. Valid commands are the following: screen -ls, screen -s <name>, screen -r <name>." << endl;
             }
         } else if (command == "scheduler-test") {
             cout << "'scheduler-test' command recognized. Doing something." << endl;
@@ -115,7 +153,6 @@ int main() {
             cout << "'report-util' command recognized. Doing something." << endl;
         } else if (command == "clear") {
             cout << "\033[2J\033[1;1H";
-            displayHeader();
         } else if (command == "exit") {
             cout << "Exiting CSOPESY." << endl;
             break;
