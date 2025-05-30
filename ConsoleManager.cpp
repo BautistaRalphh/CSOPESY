@@ -30,9 +30,9 @@ void ConsoleManager::setActiveConsole(AConsole* console) {
     }
 }
 
-void ConsoleManager::process(const std::string& command) {
+void ConsoleManager::handleCommand(const std::string& command) {
     if (activeConsole) {
-        activeConsole->process(command);
+        activeConsole->handleCommand(command);
     }
 }
 

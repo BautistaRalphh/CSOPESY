@@ -41,7 +41,7 @@ private:
 public:
     static ConsoleManager* getInstance();
     void setActiveConsole(AConsole* console);
-    void process(const std::string& command);
+    void handleCommand(const std::string& command);
     void drawConsole();
     void setExitApp(bool val);
     bool applicationExit() const;

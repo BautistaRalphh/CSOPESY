@@ -17,8 +17,8 @@ void ProcessConsole::display() {
     std::cout << "root:\\> "; 
 }
 
-void ProcessConsole::process(const std::string& command) {
-    if (command == "process-smi") {
+void ProcessConsole::handleCommand(const std::string& command) {
+    if (command == "process -smi") {
         std::cout << "\033[2J\033[1;1H";
         displayProcessInfo();
     } else if (command == "exit") {

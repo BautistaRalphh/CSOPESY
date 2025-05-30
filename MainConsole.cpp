@@ -18,7 +18,7 @@ void MainConsole::display() {
     std::cout << "\033[0m" << "Enter command: ";
 }
 
-void MainConsole::process(const std::string& command) {
+void MainConsole::handleCommand(const std::string& command) {
     handleMainCommands(command);
 }
 
