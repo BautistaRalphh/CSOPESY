@@ -2,6 +2,12 @@
 
 Welcome to the CSOPESY project! This repository contains the code for a process multiplexer and CLI built using C++. 
 
+## Members
+- Bautista, Ralph Gabriel 
+- Encarguez II, Jorenie
+- Gan, Austin Philippe
+- Gutierrez, Allen Andrei
+
 ## Features
 
 * **Main Command Recognition:** The Main Console Accepts and acknowledges the following commands:
