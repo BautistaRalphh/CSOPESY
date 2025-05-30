@@ -17,9 +17,11 @@ public:
     std::string getName() const;
     virtual void onEnabled() = 0;
     virtual void display() = 0;
-    virtual void process(const std::string& command) = 0;
+    //virtual void process() = 0;
+    virtual void handleCommand(const std::string& command) = 0;
 
     friend class ConsoleManager;
 };
 
 #endif 
+

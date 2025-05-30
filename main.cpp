@@ -12,7 +12,7 @@ int main() {
 
         std::getline(std::cin, command);
 
-        consoleManager->process(command);
+        consoleManager->handleCommand(command);
 
         command.clear();
     }

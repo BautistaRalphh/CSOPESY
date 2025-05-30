@@ -15,7 +15,8 @@ public:
 
     void onEnabled() override;
     void display() override;
-    void process(const std::string& command) override;
+    //void process() override;
+    void handleCommand(const std::string& command) override;
 };
 
-#endif // PROCESS_CONSOLE_H
+#endif
