@@ -70,7 +70,6 @@ const Process* ConsoleManager::getProcess(const std::string& name) const {
     return nullptr;
 }
 
-
 void ConsoleManager::createProcessConsole(const std::string& name) {
     if (doesProcessExist(name)) {
         std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
