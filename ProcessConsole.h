@@ -1,5 +1,4 @@
-#ifndef PROCESS_CONSOLE_H
-#define PROCESS_CONSOLE_H
+#pragma once
 
 #include "AConsole.h"
 #include "ConsoleManager.h" 
@@ -18,5 +17,3 @@ public:
     //void process() override;
     void handleCommand(const std::string& command) override;
 };
-
-#endif

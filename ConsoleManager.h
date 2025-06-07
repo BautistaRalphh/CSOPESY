@@ -1,5 +1,4 @@
-#ifndef CONSOLE_MANAGER_H
-#define CONSOLE_MANAGER_H
+#pragma once
 
 #include <string>
 #include <map>
@@ -58,5 +57,3 @@ public:
 
     ~ConsoleManager();
 };
-
-#endif

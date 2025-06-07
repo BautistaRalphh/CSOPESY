@@ -1,6 +1,4 @@
-#ifndef A_CONSOLE_H
-#define A_CONSOLE_H
-
+#pragma once
 #include <string>
 #include <iostream>
 
@@ -22,6 +20,4 @@ public:
 
     friend class ConsoleManager;
 };
-
-#endif 
 

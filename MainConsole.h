@@ -1,5 +1,4 @@
-#ifndef MAIN_CONSOLE_SCREEN_H
-#define MAIN_CONSOLE_SCREEN_H
+#pragma once
 
 #include "AConsole.h"
 #include <string>
@@ -19,5 +18,3 @@ private:
 
     bool headerDisplayed;
 };
-
-#endif 
