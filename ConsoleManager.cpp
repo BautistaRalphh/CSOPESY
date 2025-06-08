@@ -1,18 +1,25 @@
 #include "ConsoleManager.h"
 #include "ProcessConsole.h"
+#include "MainConsole.h" 
+#include "Process.h"   
+// #include "Scheduler.h" // ALLEN AND JORENIE PART
 #include <iostream>
 #include <memory>
-#include <ctime>      
-#include <iomanip>    
-#include <sstream>  
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+#include <random>     
+#include <filesystem>
 
 ConsoleManager* ConsoleManager::instance = nullptr;
 
+static std::atomic<long> pidCounter(0);
+
 ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false) {
     mainConsole = std::make_unique<MainConsole>();
+    // scheduler = std::make_unique<Scheduler>(); // ALLEN AND JORENIE PART
     setActiveConsole(mainConsole.get());
 }
-
 
 ConsoleManager* ConsoleManager::getInstance() {
     if (instance == nullptr) {
@@ -22,6 +29,7 @@ ConsoleManager* ConsoleManager::getInstance() {
 }
 
 void ConsoleManager::setActiveConsole(AConsole* console) {
+    system("cls");
     if (activeConsole != nullptr) {
     }
     activeConsole = console;
@@ -70,22 +78,35 @@ const Process* ConsoleManager::getProcess(const std::string& name) const {
     return nullptr;
 }
 
+// Returns a copy of the map containing all processes TEMPORARY WILL BE REMOVED
+std::map<std::string, Process> ConsoleManager::getAllProcesses() const {
+    return processes; 
+}
+
+static std::string generatePid() {
+    return "PID" + std::to_string(pidCounter.fetch_add(1));
+}
+
 void ConsoleManager::createProcessConsole(const std::string& name) {
     if (doesProcessExist(name)) {
         std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
         return;
     }
 
-    Process newProcess;
-    newProcess.processName = name;
-    newProcess.currentInstructionLine = 1;
-    newProcess.totalInstructionLines = 100;
-    newProcess.creationTime = getTimestamp();
+    Process newProcess(name, generatePid(), getTimestamp());
+    newProcess.setStatus(ProcessStatus::NEW);
+    newProcess.setCpuCoreExecuting(-1);
+    newProcess.setFinishTime("N/A");
+
+    newProcess.generateDummyPrintCommands(100, "Hello world from ");
+
     processes[name] = newProcess;
 
     processConsoleScreens[name] = std::make_unique<ProcessConsole>(processes[name]);
 
-    setActiveConsole(processConsoleScreens[name].get());
+    std::cout << "Process '" << name << "' (PID: " << newProcess.getPid() << ") created." << std::endl;
+    // Note: We are NOT immediately switching to the process console here for `screen -s`.
+    // The MainConsole's handleCommand will redraw its prompt.
 }
 
 void ConsoleManager::switchToProcessConsole(const std::string& name) {
@@ -94,11 +115,20 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
         return;
     }
 
-    if (processConsoleScreens.count(name)) {
-        setActiveConsole(processConsoleScreens[name].get());
+    const Process* processData = getProcess(name);
+    if (!processData) {
+        std::cout << "Error: Process data for '" << name << "' not found internally." << std::endl;
+        return;
+    }
+
+    auto it = processConsoleScreens.find(name);
+    if (it != processConsoleScreens.end()) {
+        ProcessConsole* pc = it->second.get();
+        pc->updateProcessData(*processData); 
+        setActiveConsole(pc); 
     } else {
         std::cout << "Process data for '" << name << "' found, but console screen not managed. Creating new screen." << std::endl;
-        processConsoleScreens[name] = std::make_unique<ProcessConsole>(processes[name]);
+        processConsoleScreens[name] = std::make_unique<ProcessConsole>(*processData);
         setActiveConsole(processConsoleScreens[name].get());
     }
 }

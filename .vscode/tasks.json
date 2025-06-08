@@ -12,6 +12,7 @@
                 "${workspaceFolder}\\AConsole.cpp",
                 "${workspaceFolder}\\ConsoleManager.cpp",
                 "${workspaceFolder}\\MainConsole.cpp",
+                "${workspaceFolder}\\Process.cpp",
                 "${workspaceFolder}\\ProcessConsole.cpp",
                 "-o",
                 "${workspaceFolder}\\main.exe"

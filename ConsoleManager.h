@@ -7,25 +7,20 @@
 #include <iostream>
 #include <regex>
 #include <memory>
+#include <atomic> 
 
 #include "AConsole.h"
-#include "MainConsole.h" 
+#include "MainConsole.h"
+#include "Process.h" 
 
 class ProcessConsole;
-
-struct Process {
-    std::string processName;
-    int currentInstructionLine;
-    int totalInstructionLines;
-    std::string creationTime;
-};
 
 class ConsoleManager {
 private:
     static ConsoleManager* instance;
-    ConsoleManager();
-    ConsoleManager(const ConsoleManager&) = delete;
-    ConsoleManager& operator=(const ConsoleManager&) = delete;
+    ConsoleManager(); 
+    ConsoleManager(const ConsoleManager&) = delete; 
+    ConsoleManager& operator=(const ConsoleManager&) = delete; 
 
     AConsole* activeConsole;
 
@@ -37,8 +32,11 @@ private:
 
     std::string getTimestamp();
 
+    // std::unique_ptr<Scheduler> scheduler; // ALLEN AND JORENIE PART
+
 public:
-    static ConsoleManager* getInstance();
+    static ConsoleManager* getInstance(); 
+
     void setActiveConsole(AConsole* console);
     void handleCommand(const std::string& command);
     void drawConsole();
@@ -47,13 +45,11 @@ public:
 
     void createProcessConsole(const std::string& name);
     void switchToProcessConsole(const std::string& name);
-
     bool doesProcessExist(const std::string& name) const;
     const Process* getProcess(const std::string& name) const;
 
-    std::unique_ptr<MainConsole> mainConsole; 
+    std::map<std::string, Process> getAllProcesses() const; // TEMPORARY: Will be deleted once the scheduler is done
 
+    std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;
-
-    ~ConsoleManager();
 };

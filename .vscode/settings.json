@@ -74,6 +74,9 @@
         "ranges": "cpp",
         "span": "cpp",
         "text_encoding": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "codecvt": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp"
     }
 }
