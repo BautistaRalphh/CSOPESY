@@ -2,7 +2,7 @@
 #include "ProcessConsole.h"
 #include "MainConsole.h" 
 #include "Process.h"   
-// #include "Scheduler.h" // ALLEN AND JORENIE PART
+#include "Scheduler.h"
 #include <iostream>
 #include <memory>
 #include <ctime>
@@ -18,6 +18,8 @@ static std::atomic<long> pidCounter(0);
 ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false) {
     mainConsole = std::make_unique<MainConsole>();
     // scheduler = std::make_unique<Scheduler>(); // ALLEN AND JORENIE PART
+    scheduler = std::make_unique<Scheduler>(4); // 4 cores
+    scheduler->start(); // start the scheduler
     setActiveConsole(mainConsole.get());
 }
 

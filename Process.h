@@ -7,6 +7,7 @@
 #include <sstream>
 
 enum class ProcessStatus {
+    NEW,
     IDLE,
     RUNNING,
     FINISHED,
