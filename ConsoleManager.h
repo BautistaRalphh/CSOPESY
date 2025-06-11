@@ -12,7 +12,7 @@
 #include "AConsole.h"
 #include "MainConsole.h"
 #include "Process.h" 
-#include "Scheduler.h"
+#include "FCFS_Scheduler.h"
 
 class ProcessConsole;
 
@@ -34,7 +34,7 @@ private:
     std::string getTimestamp();
 
     // std::unique_ptr<Scheduler> scheduler; // ALLEN AND JORENIE PART
-    std::unique_ptr<Scheduler> scheduler;
+    std::unique_ptr<FCFS_Scheduler> scheduler;
 
 public:
     static ConsoleManager* getInstance(); 

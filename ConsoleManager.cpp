@@ -2,7 +2,7 @@
 #include "ProcessConsole.h"
 #include "MainConsole.h" 
 #include "Process.h"   
-#include "Scheduler.h"
+#include "FCFS_Scheduler.h"
 #include <iostream>
 #include <memory>
 #include <ctime>
@@ -18,8 +18,8 @@ static std::atomic<long> pidCounter(0);
 ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false) {
     mainConsole = std::make_unique<MainConsole>();
     // scheduler = std::make_unique<Scheduler>(); // ALLEN AND JORENIE PART
-    scheduler = std::make_unique<Scheduler>(4); // 4 cores
-    scheduler->start(); // start the scheduler
+    scheduler = std::make_unique<FCFS_Scheduler>(4);
+    scheduler->start();
     setActiveConsole(mainConsole.get());
 }
 
@@ -103,6 +103,8 @@ void ConsoleManager::createProcessConsole(const std::string& name) {
     newProcess.generateDummyPrintCommands(100, "Hello world from ");
 
     processes[name] = newProcess;
+
+    scheduler->addProcess(newProcess);
 
     processConsoleScreens[name] = std::make_unique<ProcessConsole>(processes[name]);
 
