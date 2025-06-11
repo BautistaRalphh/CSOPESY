@@ -140,3 +140,12 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
 AConsole* ConsoleManager::getMainConsole() const {
     return mainConsole.get();
 }
+
+void ConsoleManager::startScheduler() {
+    if (!scheduler) return;
+    scheduler->start();
+}
+
+FCFS_Scheduler* ConsoleManager::getScheduler() {
+    return scheduler.get();
+}

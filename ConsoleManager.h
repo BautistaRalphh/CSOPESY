@@ -54,4 +54,8 @@ public:
 
     std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;
+
+    void startScheduler();
+    FCFS_Scheduler* getScheduler();
+
 };

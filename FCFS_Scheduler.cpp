@@ -13,7 +13,7 @@ FCFS_Scheduler::~FCFS_Scheduler() {
 // Queue a new process
 void FCFS_Scheduler::addProcess(const Process& process) {
     std::lock_guard<std::mutex> lock(mtx);
-    processQueue.push(process);
+    processQueue.push(const_cast<Process*>(&process));
     cv.notify_all();
 }
 
@@ -53,11 +53,14 @@ void FCFS_Scheduler::schedulerLoop() {
 
         for (int i = 0; i < coreAvailable.size(); ++i) {
             if (coreAvailable[i] && !processQueue.empty()) {
-                Process proc = processQueue.front();
+                Process* proc = processQueue.front();
                 processQueue.pop();
+
+                proc->setCpuCoreExecuting(i);
+                proc->setStatus(ProcessStatus::RUNNING);
                 coreAvailable[i] = false;
 
-                std::cout << "[Scheduler] Assigning Process " << proc.getPid()
+                std::cout << "[Scheduler] Assigning Process " << proc->getPid()
                           << " to Core " << i << std::endl;
 
             }

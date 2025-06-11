@@ -25,7 +25,7 @@ private:
     void schedulerLoop();                       // Scheduler thread loop
 
     std::vector<bool> coreAvailable;
-    std::queue<Process> processQueue;
+    std::queue<Process*> processQueue;
 
     std::mutex mtx;
     std::condition_variable cv;

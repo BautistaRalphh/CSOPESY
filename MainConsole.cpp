@@ -45,7 +45,8 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
     if (command == "initialize") {
         // ConsoleManager::getInstance()->startScheduler(); //ALLEN AND JORENIE PART
-        std::cout << "Scheduler initialization (not active yet)." << std::endl;
+        ConsoleManager::getInstance()->startScheduler();
+        std::cout << "Scheduler started!" << std::endl;
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
         std::string option = match[1].str();     
         std::string processName = match[2].str(); 
@@ -64,6 +65,12 @@ void MainConsole::handleMainCommands(const std::string& command) {
             ConsoleManager::getInstance()->createProcessConsole(processName);
 
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
+
+            const Process* newProc = ConsoleManager::getInstance()->getProcess(processName);
+            if (newProc) {
+                ConsoleManager::getInstance()->getScheduler()->addProcess(*newProc);
+            }
+
         }
     } else if (std::regex_match(command, match, screen_ls_regex)) {
         auto allProcesses = ConsoleManager::getInstance()->getAllProcesses();
