@@ -1,7 +1,7 @@
 #include "MainConsole.h"
 #include "ConsoleManager.h"
 #include "Process.h"      
-#include "FCFS_Scheduler.h"
+#include "Scheduler.h"
 #include <regex>
 #include <iomanip>
 #include <filesystem>

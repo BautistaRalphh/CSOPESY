@@ -2,7 +2,7 @@
 #include "ProcessConsole.h"
 #include "MainConsole.h" 
 #include "Process.h"   
-#include "FCFS_Scheduler.h"
+#include "Scheduler.h"
 #include <iostream>
 #include <memory>
 #include <ctime>
@@ -17,7 +17,7 @@ static std::atomic<long> pidCounter(0);
 
 ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false), schedulerStarted(false) {
     mainConsole = std::make_unique<MainConsole>();
-    scheduler = std::make_unique<FCFS_Scheduler>(4); 
+    scheduler = std::make_unique<Scheduler>(4); 
     setActiveConsole(mainConsole.get());
 }
 
@@ -157,6 +157,6 @@ void ConsoleManager::startScheduler() {
     }
 }
 
-FCFS_Scheduler* ConsoleManager::getScheduler() {
+Scheduler* ConsoleManager::getScheduler() {
     return scheduler.get();
 }

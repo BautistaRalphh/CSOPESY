@@ -12,7 +12,7 @@ class AConsole;
 class MainConsole;
 class ProcessConsole;
 class Process;
-class FCFS_Scheduler;
+class Scheduler;
 
 class ProcessConsole;
 
@@ -33,7 +33,7 @@ private:
 
     std::string getTimestamp();
 
-    std::unique_ptr<FCFS_Scheduler> scheduler;
+    std::unique_ptr<Scheduler> scheduler;
     bool schedulerStarted = false;
 
 public:
@@ -56,6 +56,6 @@ public:
     AConsole* getMainConsole() const;
 
     void startScheduler();
-    FCFS_Scheduler* getScheduler();
+    Scheduler* getScheduler();
 
 };

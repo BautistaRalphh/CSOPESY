@@ -11,10 +11,10 @@
 
 #include "Process.h"
 
-class FCFS_Scheduler {
+class Scheduler {
 public:
-    FCFS_Scheduler(int coreCount);
-    ~FCFS_Scheduler();
+    Scheduler(int coreCount);
+    ~Scheduler();
 
     void addProcess(Process* process);          // Add process to queue
     void markCoreAvailable(int core);           // Mark core as free
@@ -22,7 +22,7 @@ public:
     void stop();                                // Stop scheduler
 
 private:
-    void schedulerLoop();                       // Scheduler thread loop
+    void FCFS_Loop();                       // Scheduler thread loop
 
     std::vector<bool> coreAvailable;
     std::queue<Process*> processQueue;

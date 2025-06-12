@@ -1,37 +1,37 @@
-#include "FCFS_Scheduler.h"
+#include "Scheduler.h"
 #include <iostream>
 
 // Init core states and flags
-FCFS_Scheduler::FCFS_Scheduler(int coreCount)
+Scheduler::Scheduler(int coreCount)
     : coreAvailable(coreCount, true), running(false) {}
 
 // Stop scheduler on destruction
-FCFS_Scheduler::~FCFS_Scheduler() {
+Scheduler::~Scheduler() {
     stop();
 }
 
 // Queue a new process
-void FCFS_Scheduler::addProcess(Process* process) {
+void Scheduler::addProcess(Process* process) {
     std::lock_guard<std::mutex> lock(mtx);
     processQueue.push(process); 
     cv.notify_all();
 }
 
 // Free a core
-void FCFS_Scheduler::markCoreAvailable(int core) {
+void Scheduler::markCoreAvailable(int core) {
     std::lock_guard<std::mutex> lock(mtx);
     coreAvailable[core] = true;
     cv.notify_all();
 }
 
 // Launch scheduler thread
-void FCFS_Scheduler::start() {
+void Scheduler::start() {
     running = true;
-    schedulerThread = std::thread(&FCFS_Scheduler::schedulerLoop, this);
+    schedulerThread = std::thread(&Scheduler::FCFS_Loop, this);
 }
 
 // Stop scheduler thread
-void FCFS_Scheduler::stop() {
+void Scheduler::stop() {
     {
         std::lock_guard<std::mutex> lock(mtx);
         running = false;
@@ -43,7 +43,7 @@ void FCFS_Scheduler::stop() {
 }
 
 // FCFS logic: assign queued process to free core
-void FCFS_Scheduler::schedulerLoop() {
+void Scheduler::FCFS_Loop() {
     while (true) {
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [&] { return !running || !processQueue.empty(); });
