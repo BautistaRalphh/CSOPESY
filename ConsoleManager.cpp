@@ -15,16 +15,20 @@ ConsoleManager* ConsoleManager::instance = nullptr;
 
 static std::atomic<long> pidCounter(0);
 
-ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false), schedulerStarted(false) {
+ConsoleManager::ConsoleManager(int coreCount) : activeConsole(nullptr), exitApp(false), schedulerStarted(false) {
     mainConsole = std::make_unique<MainConsole>();
-    scheduler = std::make_unique<Scheduler>(4); 
+    scheduler = std::make_unique<Scheduler>(coreCount); 
     setActiveConsole(mainConsole.get());
 }
 
-ConsoleManager* ConsoleManager::getInstance() {
+ConsoleManager* ConsoleManager::getInstance(int coreCount) {
     if (instance == nullptr) {
-        instance = new ConsoleManager();
+        instance = new ConsoleManager(coreCount);
     }
+    return instance;
+}
+
+ConsoleManager* ConsoleManager::getInstance() {
     return instance;
 }
 
