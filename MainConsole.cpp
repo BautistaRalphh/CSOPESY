@@ -65,8 +65,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
             ConsoleManager::getInstance()->createProcessConsole(processName);
 
-            // Directly switch to the newly created process console.
-            // ConsoleManager::createProcessConsole now handles adding the process to the scheduler.
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
         }
     } else if (std::regex_match(command, match, screen_ls_regex)) {
@@ -77,7 +75,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
         for (const auto& pair : allProcesses) {
             const Process& p = pair.second;
-            // Handle NEW and READY statuses for display
             if (p.getStatus() == ProcessStatus::FINISHED) {
                 finishedProcesses.push_back(p);
             } else {
@@ -85,7 +82,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
 
-        // --- Display Active Processes ---
         std::cout << "\n--- Active Processes ---" << std::endl;
         if (activeProcesses.empty()) {
             std::cout << " No active processes found." << std::endl;

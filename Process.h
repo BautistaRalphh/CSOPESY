@@ -49,14 +49,11 @@ private:
     std::map<std::string, uint16_t> variables;
 
 public:
-    // Constructor
     Process(const std::string& name = "", const std::string& p_id = "", const std::string& c_time = "");
 
-    // Methods to manage commands
     void addCommand(const std::string& rawCommand);
     void generateDummyPrintCommands(int count, const std::string& baseMessage);
 
-    // Getters for process information
     const std::string& getPid() const { return pid; }
     const std::string& getProcessName() const { return processName; }
     const std::vector<ParsedCommand>& getCommands() const { return commands; }

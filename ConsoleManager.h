@@ -1,5 +1,4 @@
 #pragma once
-
 #include <string>
 #include <map>
 #include <ctime>
@@ -34,9 +33,8 @@ private:
 
     std::string getTimestamp();
 
-    // std::unique_ptr<Scheduler> scheduler; // ALLEN AND JORENIE PART
     std::unique_ptr<FCFS_Scheduler> scheduler;
-    bool schedulerStarted = false; // add this line
+    bool schedulerStarted = false;
 
 public:
     static ConsoleManager* getInstance(); 
