@@ -19,7 +19,7 @@ class ProcessConsole;
 class ConsoleManager {
 private:
     static ConsoleManager* instance;
-    ConsoleManager(); 
+    ConsoleManager(int coreCount); 
     ConsoleManager(const ConsoleManager&) = delete; 
     ConsoleManager& operator=(const ConsoleManager&) = delete; 
 
@@ -37,6 +37,7 @@ private:
     bool schedulerStarted = false;
 
 public:
+    static ConsoleManager* getInstance(int coreCount);
     static ConsoleManager* getInstance(); 
 
     void setActiveConsole(AConsole* console);
