@@ -231,19 +231,17 @@ void ConsoleManager::startScheduler() {
         return; 
     }
 
-if (scheduler) {
-    scheduler->start();
-    schedulerStarted = true;
+    if (scheduler) {
+        scheduler->start();
+        schedulerStarted = true;
 
-    // resume paused processes
-    for (auto& pair : processes) {
-        Process& p = pair.second;
-        if (p.getStatus() == ProcessStatus::PAUSED) {
-            p.setStatus(ProcessStatus::RUNNING);
+        // resume paused processes
+        for (auto& pair : processes) {
+            Process& p = pair.second;
+            if (p.getStatus() == ProcessStatus::PAUSED) {
+                p.setStatus(ProcessStatus::RUNNING);
+            }
         }
-    }
-
-    std::cout << "Scheduler initialized and started successfully!" << std::endl;
         std::cout << "Scheduler initialized and started successfully!" << std::endl;
     } else {
         std::cerr << "Error: Scheduler could not be created or configured." << std::endl;
