@@ -66,7 +66,6 @@ public:
     ProcessStatus getStatus() const { return status; }
     int getCpuCoreExecuting() const; 
     const std::string& getFinishTime() const { return finishTime; }
-
     const ParsedCommand* getNextCommand() const;
     const ParsedCommand* getCommandAtIndex(int index) const;
 

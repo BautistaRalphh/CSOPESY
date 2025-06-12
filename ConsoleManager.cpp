@@ -17,7 +17,6 @@ static std::atomic<long> pidCounter(0);
 
 ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false) {
     mainConsole = std::make_unique<MainConsole>();
-    // scheduler = std::make_unique<Scheduler>(); // ALLEN AND JORENIE PART
     scheduler = std::make_unique<Scheduler>(4); // 4 cores
     scheduler->start(); // start the scheduler
     setActiveConsole(mainConsole.get());
@@ -80,7 +79,6 @@ const Process* ConsoleManager::getProcess(const std::string& name) const {
     return nullptr;
 }
 
-// Returns a copy of the map containing all processes TEMPORARY WILL BE REMOVED
 std::map<std::string, Process> ConsoleManager::getAllProcesses() const {
     return processes; 
 }

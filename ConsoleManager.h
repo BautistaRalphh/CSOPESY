@@ -50,7 +50,7 @@ public:
     bool doesProcessExist(const std::string& name) const;
     const Process* getProcess(const std::string& name) const;
 
-    std::map<std::string, Process> getAllProcesses() const; // TEMPORARY: Will be deleted once the scheduler is done
+    std::map<std::string, Process> getAllProcesses() const; 
 
     std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;

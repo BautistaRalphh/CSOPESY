@@ -44,7 +44,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
     std::smatch match;
 
     if (command == "initialize") {
-        // ConsoleManager::getInstance()->startScheduler(); //ALLEN AND JORENIE PART
         std::cout << "Scheduler initialization (not active yet)." << std::endl;
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
         std::string option = match[1].str();     
