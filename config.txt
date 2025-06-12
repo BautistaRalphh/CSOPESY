@@ -1,2 +1,2 @@
 scheduler_type = FCFS
-core_count = 6
+core_count = 4
