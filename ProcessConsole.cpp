@@ -39,7 +39,6 @@ void ProcessConsole::handleCommand(const std::string& command) {
 }
 
 void ProcessConsole::displayProcessInfo() {
-    std::cout << "\033["; 
     std::cout << "Process Information" << std::endl;
     std::cout << "Name: " << currentProcessData->getProcessName() << std::endl;
     std::cout << "PID: " << currentProcessData->getPid() << std::endl;
