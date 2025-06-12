@@ -3,7 +3,9 @@
 #include <string>
 
 int main() {
-    ConsoleManager* consoleManager = ConsoleManager::getInstance();
+    int coreCount = 4;
+
+    ConsoleManager* consoleManager = ConsoleManager::getInstance(coreCount);
 
     std::string command;
 
