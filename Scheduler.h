@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Process.h"
 #include <queue>
 #include <mutex>
 #include <condition_variable>
@@ -9,7 +10,12 @@
 #include <atomic>
 #include <iostream>
 
-#include "Process.h"
+class Process;
+
+enum class SchedulerAlgorithmType {
+    NONE,
+    FCFS,
+};
 
 class Scheduler {
 public:
@@ -20,15 +26,28 @@ public:
     void markCoreAvailable(int core);           // Mark core as free
     void start();                               // Start scheduler
     void stop();                                // Stop scheduler
+    void resetCoreStates();
+    void setAlgorithmType(SchedulerAlgorithmType type);
+
+    int getTotalCores() const;
+    int getCoresUsed() const;
+    int getCoresAvailable() const;
+    double getCpuUtilization() const;
+    bool isRunning() const;
 
 private:
-    void FCFS_Loop();                       // Scheduler thread loop
+    void runSchedulingLoop();                      // Scheduler thread loop
+
+    // Private functions for each algorithm's logic
+    void _runFCFSLogic(std::unique_lock<std::mutex>& lock);
+    // void _runRoundRobinLogic(std::unique_lock<std::mutex>& lock);
 
     std::vector<bool> coreAvailable;
     std::queue<Process*> processQueue;
 
-    std::mutex mtx;
-    std::condition_variable cv;
+    mutable std::mutex mtx;
+    mutable std::condition_variable cv;
     std::thread schedulerThread;
     std::atomic<bool> running;
+    SchedulerAlgorithmType currentAlgorithm;
 };

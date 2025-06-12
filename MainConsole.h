@@ -17,4 +17,5 @@ private:
     void handleMainCommands(const std::string& command);
 
     bool headerDisplayed;
+    bool initialized;
 };

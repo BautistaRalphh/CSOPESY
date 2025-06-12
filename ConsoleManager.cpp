@@ -10,25 +10,22 @@
 #include <sstream>
 #include <random>    
 #include <filesystem>
+#include <map>     
+#include <fstream>
 
 ConsoleManager* ConsoleManager::instance = nullptr;
 
 static std::atomic<long> pidCounter(0);
 
-ConsoleManager::ConsoleManager(int coreCount) : activeConsole(nullptr), exitApp(false), schedulerStarted(false) {
+ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false), schedulerStarted(false) {
     mainConsole = std::make_unique<MainConsole>();
-    scheduler = std::make_unique<Scheduler>(coreCount); 
     setActiveConsole(mainConsole.get());
 }
 
-ConsoleManager* ConsoleManager::getInstance(int coreCount) {
-    if (instance == nullptr) {
-        instance = new ConsoleManager(coreCount);
-    }
-    return instance;
-}
-
 ConsoleManager* ConsoleManager::getInstance() {
+    if (instance == nullptr) {
+        instance = new ConsoleManager(); 
+    }
     return instance;
 }
 
@@ -96,10 +93,10 @@ static std::string generatePid() {
     return "PID" + std::to_string(pidCounter.fetch_add(1));
 }
 
-void ConsoleManager::createProcessConsole(const std::string& name) {
+bool ConsoleManager::createProcessConsole(const std::string& name) {
     if (doesProcessExist(name)) {
         std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
-        return;
+        return false;
     }
 
     Process newProcess(name, generatePid(), getTimestamp());
@@ -120,6 +117,7 @@ void ConsoleManager::createProcessConsole(const std::string& name) {
     std::cout << "Process '" << name << "' (PID: " << processInMap->getPid() << ") created." << std::endl;
     // Note: We are NOT immediately switching to the process console here for `screen -s`.
     // The MainConsole's handleCommand will redraw its prompt unless switched.
+    return true;
 }
 
 void ConsoleManager::switchToProcessConsole(const std::string& name) {
@@ -150,14 +148,114 @@ AConsole* ConsoleManager::getMainConsole() const {
     return mainConsole.get();
 }
 
+bool ConsoleManager::readConfigFile(const std::string& filename, std::map<std::string, std::string>& config) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open config file: " << filename << std::endl;
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+
+        if (line.empty() || line[0] == '#') { 
+            continue;
+        }
+
+        size_t equalsPos = line.find('=');
+        if (equalsPos != std::string::npos) {
+            std::string key = line.substr(0, equalsPos);
+            std::string value = line.substr(equalsPos + 1);
+
+            key.erase(0, key.find_first_not_of(" \t\r\n"));
+            key.erase(key.find_last_not_of(" \t\r\n") + 1);
+            value.erase(0, value.find_first_not_of(" \t\r\n"));
+            value.erase(value.find_last_not_of(" \t\r\n") + 1);
+
+            config[key] = value;
+        }
+    }
+    file.close();
+    return true;
+}
+
 void ConsoleManager::startScheduler() {
-    if (scheduler && !schedulerStarted) {
+    if (schedulerStarted) {
+        std::cout << "Scheduler is already running." << std::endl;
+        return;
+    }
+
+    std::map<std::string, std::string> config;
+    if (!readConfigFile("config.txt", config)) {
+        std::cerr << "Failed to load scheduler configuration from config.txt." << std::endl;
+        return;
+    }
+
+    std::string schedulerTypeStr = config["scheduler_type"]; 
+    int coreCount = 0;
+
+    try {
+        coreCount = std::stoi(config["core_count"]);
+        if (coreCount <= 0) {
+            std::cerr << "Error: 'core_count' must be a positive integer. Found: " << config["core_count"] << std::endl;
+            return;
+        }
+    } catch (const std::invalid_argument& e) {
+        std::cerr << "Error: Invalid 'core_count' value in config.txt. Must be an integer." << std::endl;
+        return;
+    } catch (const std::out_of_range& e) {
+        std::cerr << "Error: 'core_count' value out of range in config.txt." << std::endl;
+        return;
+    }
+
+    if (!scheduler) {
+        scheduler = std::make_unique<Scheduler>(coreCount);
+    } else {
+        std::cout << "Scheduler instance already exists. Reconfiguring type and cores." << std::endl;
+    }
+    
+    // Set the algorithm type based on config
+    if (schedulerTypeStr == "FCFS") {
+        scheduler->setAlgorithmType(SchedulerAlgorithmType::FCFS);
+        std::cout << "Scheduler type: FCFS, Cores: " << coreCount << std::endl;
+    } 
+    // else if (schedulerTypeStr == "RoundRobin") {
+    //     scheduler->setAlgorithmType(SchedulerAlgorithmType::ROUND_ROBIN);
+    //     std::cout << "Scheduler type: RoundRobin, Cores: " << coreCount << std::endl;
+    // } 
+    else {
+        std::cerr << "Error: Unknown scheduler_type in config.txt: " << schedulerTypeStr << std::endl;
+        std::cerr << "Supported types: FCFS" << std::endl;
+        return; 
+    }
+
+    if (scheduler) {
         scheduler->start();
         schedulerStarted = true;
+        std::cout << "Scheduler initialized and started successfully!" << std::endl;
+    } else {
+        std::cerr << "Error: Scheduler could not be created or configured." << std::endl;
+    }
+}
+void ConsoleManager::stopScheduler() {
+    if (scheduler && schedulerStarted) {
+        scheduler->stop();
+        schedulerStarted = false;
+
+        for (auto& pair : processes) {
+            Process& p = pair.second; 
+            if (p.getStatus() == ProcessStatus::RUNNING) {
+                p.setStatus(ProcessStatus::PAUSED);
+                p.setCpuCoreExecuting(-1); 
+            }
+        }
+        
     } else if (!scheduler) {
         std::cerr << "[ERROR] Scheduler is not initialized." << std::endl;
     } else {
-        std::cout << "Scheduler is already running." << std::endl;
+        std::cout << "Scheduler is not currently running." << std::endl;
     }
 }
 

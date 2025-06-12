@@ -1,4 +1,11 @@
 #pragma once
+
+#include "ConsoleManager.h"
+#include "ProcessConsole.h" 
+#include "MainConsole.h"    
+#include "Process.h"       
+#include "Scheduler.h"
+
 #include <string>
 #include <map>
 #include <ctime>
@@ -8,18 +15,12 @@
 #include <memory>
 #include <atomic> 
 
-class AConsole;
-class MainConsole;
-class ProcessConsole;
-class Process;
-class Scheduler;
-
 class ProcessConsole;
 
 class ConsoleManager {
 private:
     static ConsoleManager* instance;
-    ConsoleManager(int coreCount); 
+    ConsoleManager();
     ConsoleManager(const ConsoleManager&) = delete; 
     ConsoleManager& operator=(const ConsoleManager&) = delete; 
 
@@ -36,8 +37,8 @@ private:
     std::unique_ptr<Scheduler> scheduler;
     bool schedulerStarted = false;
 
+    bool readConfigFile(const std::string& filename, std::map<std::string, std::string>& config);
 public:
-    static ConsoleManager* getInstance(int coreCount);
     static ConsoleManager* getInstance(); 
 
     void setActiveConsole(AConsole* console);
@@ -46,7 +47,7 @@ public:
     void setExitApp(bool val);
     bool applicationExit() const;
 
-    void createProcessConsole(const std::string& name);
+    bool createProcessConsole(const std::string& name);
     void switchToProcessConsole(const std::string& name);
     bool doesProcessExist(const std::string& name) const;
     const Process* getProcess(const std::string& name) const;
@@ -57,6 +58,7 @@ public:
     AConsole* getMainConsole() const;
 
     void startScheduler();
+    void stopScheduler(); 
     Scheduler* getScheduler();
 
 };

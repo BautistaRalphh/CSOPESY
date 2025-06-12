@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector> 
 
-MainConsole::MainConsole() : AConsole("MainConsole"), headerDisplayed(false) {}
+MainConsole::MainConsole() : AConsole("MainConsole"), headerDisplayed(false), initialized(false) {}
 
 void MainConsole::onEnabled() {
     system("cls");
@@ -26,7 +26,22 @@ void MainConsole::display() {
 }
 
 void MainConsole::handleCommand(const std::string& command) {
-    handleMainCommands(command);
+    if (command == "exit") {
+        std::cout << "Exiting CSOPESY." << std::endl;
+        ConsoleManager::getInstance()->setExitApp(true);
+        return;
+    }
+
+    if (!initialized) {
+        if (command == "initialize") {
+            initialized = true;
+            std::cout << "Console initialized" << std::endl;
+        } else {
+            std::cout << "Please type 'initialize' first before using other commands." << std::endl;
+        }
+    } else {
+        handleMainCommands(command);
+    }
 }
 
 void MainConsole::displayHeader() {
@@ -46,8 +61,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
     std::smatch match;
 
     if (command == "initialize") {
-        ConsoleManager::getInstance()->startScheduler();
-        std::cout << "Scheduler started!" << std::endl;
+        std::cout << "Console is already initialized." << std::endl;
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
         std::string option = match[1].str(); 
         std::string processName = match[2].str(); 
@@ -63,11 +77,15 @@ void MainConsole::handleMainCommands(const std::string& command) {
                     std::cerr << "Error creating directory 'process_logs': " << e.what() << std::endl;
                 }
             }
-            ConsoleManager::getInstance()->createProcessConsole(processName);
 
-            ConsoleManager::getInstance()->switchToProcessConsole(processName);
+            bool created = ConsoleManager::getInstance()->createProcessConsole(processName);
+            if (created) {
+                ConsoleManager::getInstance()->switchToProcessConsole(processName);
+            }
         }
     } else if (std::regex_match(command, match, screen_ls_regex)) {
+        auto consoleManager = ConsoleManager::getInstance();
+        Scheduler* scheduler = consoleManager->getScheduler();
         auto allProcesses = ConsoleManager::getInstance()->getAllProcesses();
 
         std::vector<Process> activeProcesses;
@@ -80,6 +98,21 @@ void MainConsole::handleMainCommands(const std::string& command) {
             } else {
                 activeProcesses.push_back(p);
             }
+        }
+        
+        std::cout << "\n--- Scheduler Status ---" << std::endl;
+        if (scheduler && scheduler->isRunning()) {
+            double cpuUtilization = scheduler->getCpuUtilization();
+            int coresUsed = scheduler->getCoresUsed();            
+            int coresAvailable = scheduler->getCoresAvailable();  
+            int totalCores = scheduler->getTotalCores();           
+
+            std::cout << " Total Cores: " << totalCores << std::endl;
+            std::cout << " Cores Used: " << coresUsed << std::endl;
+            std::cout << " Cores Available: " << coresAvailable << std::endl;
+            std::cout << " CPU Utilization: " << std::fixed << std::setprecision(2) << cpuUtilization << "%" << std::endl;
+        } else {
+            std::cout << " Scheduler is not running. Use 'scheduler-start' to activate." << std::endl;
         }
 
         std::cout << "\n--- Active Processes ---" << std::endl;
@@ -120,8 +153,12 @@ void MainConsole::handleMainCommands(const std::string& command) {
         std::cout << std::flush; 
     } else if (command == "scheduler-test") {
         std::cout << "'scheduler-test' command recognized. Doing something." << std::endl;
-    } else if (command == "scheduler-stop") {
-        std::cout << "'scheduler-stop' command recognized. Doing something." << std::endl;
+    } else if (command == "scheduler-start") {
+        ConsoleManager::getInstance()->startScheduler();
+        std::cout << "Scheduler started." << std::endl;
+    }else if (command == "scheduler-stop") {
+        ConsoleManager::getInstance()->stopScheduler();
+        std::cout << "Scheduler stopped." << std::endl;
     } else if (command == "report-util") {
         std::cout << "'report-util' command recognized. Doing something." << std::endl;
     } else if (command == "clear") {
