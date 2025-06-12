@@ -1,5 +1,7 @@
 #include "MainConsole.h"
 #include "ConsoleManager.h"
+#include "Process.h"      
+#include "FCFS_Scheduler.h"
 #include <regex>
 #include <iomanip>
 #include <filesystem>
@@ -28,12 +30,12 @@ void MainConsole::handleCommand(const std::string& command) {
 }
 
 void MainConsole::displayHeader() {
-    std::cout << "  _____  _____  ____  _____  ______  _______    __" << std::endl;
-    std::cout << " / ____|/ ____|/ __ \\|  __ \\|  ____|/ ____\\ \\  / /" << std::endl;
-    std::cout << "| |    | (___ | |  | | |__) | |__  | (___  \\ \\/ / " << std::endl;
-    std::cout << "| |     \\___ \\| |  | | ___/ |  __|  \\___ \\  \\  /  " << std::endl;
-    std::cout << "| |____ ____) | |__| | |    | |____ ____) |  | |   " << std::endl;
-    std::cout << " \\_____|_____/ \\____/|_|    |______|_____/   |_|   " << std::endl;
+    std::cout << " ____ _ _____ ____ ______ _______ __" << std::endl;
+    std::cout << " / ____|/ ____|/ __ \\| __ \\| ____|/ ____\\ \\ / /" << std::endl;
+    std::cout << "| | | (___ | | | | |__) | |__| | (___ \\ \\/ / " << std::endl;
+    std::cout << "| | \\___ \\| | | | ___/ | __ |\\___ \\ \\ / " << std::endl;
+    std::cout << "| |____ ____) | |__| | | |____ ____) | | " << std::endl;
+    std::cout << " \\_____|_____/ \\____/|_| |______|_____/ |_| " << std::endl;
     std::cout << "\033[32mHello, welcome to CSOPESY command line\033[0m" << std::endl;
     std::cout << "\033[33mType 'exit' to quit, 'clear' to clear the screen\033[0m" << std::endl;
 }
@@ -44,9 +46,10 @@ void MainConsole::handleMainCommands(const std::string& command) {
     std::smatch match;
 
     if (command == "initialize") {
-        std::cout << "Scheduler initialization (not active yet)." << std::endl;
+        ConsoleManager::getInstance()->startScheduler();
+        std::cout << "Scheduler started!" << std::endl;
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
-        std::string option = match[1].str();     
+        std::string option = match[1].str(); 
         std::string processName = match[2].str(); 
 
         if (option == "-r") {
@@ -62,6 +65,8 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
             ConsoleManager::getInstance()->createProcessConsole(processName);
 
+            // Directly switch to the newly created process console.
+            // ConsoleManager::createProcessConsole now handles adding the process to the scheduler.
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
         }
     } else if (std::regex_match(command, match, screen_ls_regex)) {
@@ -72,7 +77,8 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
         for (const auto& pair : allProcesses) {
             const Process& p = pair.second;
-            if (static_cast<int>(p.getStatus()) == static_cast<int>(ProcessStatus::FINISHED)) {
+            // Handle NEW and READY statuses for display
+            if (p.getStatus() == ProcessStatus::FINISHED) {
                 finishedProcesses.push_back(p);
             } else {
                 activeProcesses.push_back(p);
@@ -82,17 +88,18 @@ void MainConsole::handleMainCommands(const std::string& command) {
         // --- Display Active Processes ---
         std::cout << "\n--- Active Processes ---" << std::endl;
         if (activeProcesses.empty()) {
-            std::cout << "  No active processes found." << std::endl;
+            std::cout << " No active processes found." << std::endl;
         } else {
             for (const auto& p : activeProcesses) {
                 std::string statusStr;
                 switch (p.getStatus()) {
+                    case ProcessStatus::NEW: statusStr = "NEW"; break;
                     case ProcessStatus::IDLE: statusStr = "IDLE"; break;
                     case ProcessStatus::RUNNING: statusStr = "RUNNING"; break;
                     case ProcessStatus::PAUSED: statusStr = "PAUSED"; break;
                     case ProcessStatus::FINISHED: statusStr = "FINISHED"; break; 
                 }
-                std::cout << "  " << p.getProcessName() 
+                std::cout << " " << p.getProcessName() 
                           << " (" << p.getCreationTime() << ") "
                           << "Status: " << statusStr
                           << " Core: " << (p.getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p.getCpuCoreExecuting()))
@@ -103,12 +110,12 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
         std::cout << "\n--- Finished Processes ---" << std::endl;
         if (finishedProcesses.empty()) {
-            std::cout << "  No finished processes found." << std::endl;
+            std::cout << " No finished processes found." << std::endl;
         } else {
             for (const auto& p : finishedProcesses) {
-                 std::cout << "  " << p.getProcessName() 
+                std::cout << " " << p.getProcessName() 
                           << " (" << p.getCreationTime() << ") "
-                          << "Status: " << "FINISHED"
+                          << "Status: " << "FINISHED" // Status is already FINISHED for these
                           << " Core: " << (p.getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p.getCpuCoreExecuting()))
                           << " " << p.getCurrentCommandIndex() << "/" << p.getTotalInstructionLines() 
                           << std::endl;

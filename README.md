@@ -16,10 +16,10 @@ Welcome to the CSOPESY project! This repository contains the code for a process 
     * `screen -r <name>`: Redirects the user to the process they want to go to.
     * `scheduler-test`: Not yet implemented
     * `scheduler-stop`: Not yet implemented
-    * `report-util`: Not yet implemented
+    * `report-util`: Not yet implemented 
     * `clear`: Clears the terminal screen and reprints the header.
     * `exit`: Closes the command-line emulator.
- 
-* **Process Command Recognition:** The Process Console Accepts and acknowledges the following commands:
+
+ **Process Command Recognition:** The Process Console Accepts and acknowledges the following commands:
    * `process -smi`: Clears the process screen and displays the most recent information about that process.
    * `exit`: Redirects the user back to the main console.

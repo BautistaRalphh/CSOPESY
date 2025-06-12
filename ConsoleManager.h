@@ -9,10 +9,11 @@
 #include <memory>
 #include <atomic> 
 
-#include "AConsole.h"
-#include "MainConsole.h"
-#include "Process.h" 
-#include "Scheduler.h"
+class AConsole;
+class MainConsole;
+class ProcessConsole;
+class Process;
+class FCFS_Scheduler;
 
 class ProcessConsole;
 
@@ -34,7 +35,8 @@ private:
     std::string getTimestamp();
 
     // std::unique_ptr<Scheduler> scheduler; // ALLEN AND JORENIE PART
-    std::unique_ptr<Scheduler> scheduler;
+    std::unique_ptr<FCFS_Scheduler> scheduler;
+    bool schedulerStarted = false; // add this line
 
 public:
     static ConsoleManager* getInstance(); 
@@ -49,9 +51,13 @@ public:
     void switchToProcessConsole(const std::string& name);
     bool doesProcessExist(const std::string& name) const;
     const Process* getProcess(const std::string& name) const;
-
+    Process* getProcessMutable(const std::string& name);
     std::map<std::string, Process> getAllProcesses() const; 
 
     std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;
+
+    void startScheduler();
+    FCFS_Scheduler* getScheduler();
+
 };

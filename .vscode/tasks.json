@@ -14,7 +14,7 @@
                 "${workspaceFolder}\\MainConsole.cpp",
                 "${workspaceFolder}\\Process.cpp",
                 "${workspaceFolder}\\ProcessConsole.cpp",
-                "${workspaceFolder}\\Scheduler.cpp",
+                "${workspaceFolder}\\FCFS_Scheduler.cpp",
                 "-o",
                 "${workspaceFolder}\\main.exe"
             ],

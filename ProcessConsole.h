@@ -1,20 +1,21 @@
 #pragma once
 
 #include "AConsole.h"
-#include "ConsoleManager.h"
 #include "Process.h"       
+
+class Process;
 
 class ProcessConsole : public AConsole {
 private:
-    Process currentProcessData;
+    Process* currentProcessData;
 
     void displayProcessInfo();
 
 public:
-    ProcessConsole(const Process& processData); 
+    ProcessConsole(Process* processData); 
     void onEnabled() override; 
     void display() override;  
     void handleCommand(const std::string& command) override; 
 
-    void updateProcessData(const Process& newData);
+    void updateProcessData(Process* newData); 
 };
