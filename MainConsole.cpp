@@ -30,12 +30,12 @@ void MainConsole::handleCommand(const std::string& command) {
 }
 
 void MainConsole::displayHeader() {
-    std::cout << " ____ _ _____ ____ ______ _______ __" << std::endl;
-    std::cout << " / ____|/ ____|/ __ \\| __ \\| ____|/ ____\\ \\ / /" << std::endl;
-    std::cout << "| | | (___ | | | | |__) | |__| | (___ \\ \\/ / " << std::endl;
-    std::cout << "| | \\___ \\| | | | ___/ | __ |\\___ \\ \\ / " << std::endl;
-    std::cout << "| |____ ____) | |__| | | |____ ____) | | " << std::endl;
-    std::cout << " \\_____|_____/ \\____/|_| |______|_____/ |_| " << std::endl;
+    std::cout << "  _____  _____  ____  _____  ______  _______    __" << std::endl;
+    std::cout << " / ____|/ ____|/ __ \\|  __ \\|  ____|/ ____\\ \\  / /" << std::endl;
+    std::cout << "| |    | (___ | |  | | |__) | |__  | (___  \\ \\/ / " << std::endl;
+    std::cout << "| |     \\___ \\| |  | | ___/ |  __|  \\___ \\  \\  /  " << std::endl;
+    std::cout << "| |____ ____) | |__| | |    | |____ ____) |  | |   " << std::endl;
+    std::cout << " \\_____|_____/ \\____/|_|    |______|_____/   |_|   " << std::endl;
     std::cout << "\033[32mHello, welcome to CSOPESY command line\033[0m" << std::endl;
     std::cout << "\033[33mType 'exit' to quit, 'clear' to clear the screen\033[0m" << std::endl;
 }
