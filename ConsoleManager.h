@@ -35,6 +35,7 @@ private:
 
     // std::unique_ptr<Scheduler> scheduler; // ALLEN AND JORENIE PART
     std::unique_ptr<FCFS_Scheduler> scheduler;
+    bool schedulerStarted = false; // add this line
 
 public:
     static ConsoleManager* getInstance(); 

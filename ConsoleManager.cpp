@@ -19,7 +19,6 @@ ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false) {
     mainConsole = std::make_unique<MainConsole>();
     // scheduler = std::make_unique<Scheduler>(); // ALLEN AND JORENIE PART
     scheduler = std::make_unique<FCFS_Scheduler>(4);
-    scheduler->start();
     setActiveConsole(mainConsole.get());
 }
 
@@ -142,8 +141,12 @@ AConsole* ConsoleManager::getMainConsole() const {
 }
 
 void ConsoleManager::startScheduler() {
-    if (!scheduler) return;
-    scheduler->start();
+    if (scheduler && !schedulerStarted) {
+        scheduler->start();
+        schedulerStarted = true;
+    } else if (!scheduler) {
+        std::cerr << "[ERROR] Scheduler is not initialized." << std::endl;
+    }
 }
 
 FCFS_Scheduler* ConsoleManager::getScheduler() {
