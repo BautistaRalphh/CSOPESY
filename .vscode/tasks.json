@@ -8,13 +8,19 @@
                 "-fdiagnostics-color=always",
                 "-g",
                 "-std=c++20",
-                "${workspaceFolder}\\main.cpp",
-                "${workspaceFolder}\\AConsole.cpp",
-                "${workspaceFolder}\\ConsoleManager.cpp",
-                "${workspaceFolder}\\MainConsole.cpp",
-                "${workspaceFolder}\\Process.cpp",
-                "${workspaceFolder}\\ProcessConsole.cpp",
-                "${workspaceFolder}\\Scheduler.cpp",
+ 
+                "-I",
+                "${workspaceFolder}\\src",
+
+                "${workspaceFolder}\\main.cpp", 
+
+                "${workspaceFolder}\\src\\console\\AConsole.cpp",
+                "${workspaceFolder}\\src\\ConsoleManager.cpp",
+                "${workspaceFolder}\\src\\console\\MainConsole.cpp",
+                "${workspaceFolder}\\src\\core\\Process.cpp",
+                "${workspaceFolder}\\src\\console\\ProcessConsole.cpp",
+                "${workspaceFolder}\\src\\core\\Scheduler.cpp",
+                
                 "-o",
                 "${workspaceFolder}\\main.exe"
             ],
