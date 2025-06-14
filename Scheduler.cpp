@@ -142,13 +142,26 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
             proc->setStatus(ProcessStatus::RUNNING);
             coreAvailable[i] = false;
 
-            // launch a thread/task here
-            // to simulate execution of this process, which would eventually
-            // call markCoreAvailable(i) when done.
-            // Example:
-            // std::cout << "DEBUG: FCFS assigning " << proc->getProcessName() << " to core " << i << std::endl;
+            std::thread([this, proc, i]() {
+                int cmdIndex = 0;
 
+                while (const ParsedCommand* cmd = proc->getNextCommand()) {
+                    while (proc->getStatus() == ProcessStatus::PAUSED) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+
+                    proc->setStatus(ProcessStatus::RUNNING);
+                    proc->setCurrentCommandIndex(cmdIndex);
+
+                    // std::cout << "DEBUG: FCFS assigning " << proc->getProcessName() << " to core " << i << std::endl;
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    ++cmdIndex;
+                }
+
+                proc->setStatus(ProcessStatus::FINISHED);
+                markCoreAvailable(i);
+            }).detach();
         }
     }
 }
-
