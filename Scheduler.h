@@ -28,6 +28,7 @@ public:
     void stop();                                // Stop scheduler
     void resetCoreStates();
     void setAlgorithmType(SchedulerAlgorithmType type);
+    SchedulerAlgorithmType getAlgorithmType() const;
 
     int getTotalCores() const;
     int getCoresUsed() const;

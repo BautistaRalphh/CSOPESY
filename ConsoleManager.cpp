@@ -53,7 +53,7 @@ void ConsoleManager::setExitApp(bool val) {
     exitApp = val;
 }
 
-bool ConsoleManager::applicationExit() const {
+bool ConsoleManager::getExitApp() const {
     return exitApp;
 }
 
@@ -181,64 +181,58 @@ bool ConsoleManager::readConfigFile(const std::string& filename, std::map<std::s
     return true;
 }
 
+void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type) {
+    if (scheduler && scheduler->isRunning()) {
+        std::cout << "Scheduler is already running. Please stop it before re-initializing." << std::endl;
+        return;
+    }
+
+    if (scheduler) {
+        scheduler.reset(); 
+        schedulerStarted = false; 
+    }
+    
+    scheduler = std::make_unique<Scheduler>(numCpus);
+    
+    scheduler->setAlgorithmType(type);
+
+    std::cout << "System initialized with " << numCpus << " CPUs and scheduler type: ";
+    switch(type) {
+        case SchedulerAlgorithmType::FCFS:
+            std::cout << "FCFS";
+            break;
+        case SchedulerAlgorithmType::NONE:
+            std::cout << "NONE (algorithm not set)";
+            break;
+        // Add cases for other algorithm types (e.g., ROUND_ROBIN) here
+        // case SchedulerAlgorithmType::ROUND_ROBIN:
+        //     std::cout << "Round Robin";
+        //     break;
+    }
+    std::cout << "." << std::endl;
+
+}
+
 void ConsoleManager::startScheduler() {
     if (schedulerStarted) {
         std::cout << "Scheduler is already running." << std::endl;
         return;
     }
-
-    std::map<std::string, std::string> config;
-    if (!readConfigFile("config.txt", config)) {
-        std::cerr << "Failed to load scheduler configuration from config.txt." << std::endl;
-        return;
-    }
-
-    std::string schedulerTypeStr = config["scheduler_type"]; 
-    int coreCount = 0;
-
-    try {
-        coreCount = std::stoi(config["core_count"]);
-        if (coreCount <= 0) {
-            std::cerr << "Error: 'core_count' must be a positive integer. Found: " << config["core_count"] << std::endl;
-            return;
-        }
-    } catch (const std::invalid_argument& e) {
-        std::cerr << "Error: Invalid 'core_count' value in config.txt. Must be an integer." << std::endl;
-        return;
-    } catch (const std::out_of_range& e) {
-        std::cerr << "Error: 'core_count' value out of range in config.txt." << std::endl;
-        return;
-    }
-
-    if (!scheduler) {
-        scheduler = std::make_unique<Scheduler>(coreCount);
-    } else {
-        std::cout << "Scheduler instance already exists. Reconfiguring type and cores." << std::endl;
-    }
     
-    // Set the algorithm type based on config
-    if (schedulerTypeStr == "FCFS") {
-        scheduler->setAlgorithmType(SchedulerAlgorithmType::FCFS);
-        std::cout << "Scheduler type: FCFS, Cores: " << coreCount << std::endl;
-    } 
-    // else if (schedulerTypeStr == "RoundRobin") {
-    //     scheduler->setAlgorithmType(SchedulerAlgorithmType::ROUND_ROBIN);
-    //     std::cout << "Scheduler type: RoundRobin, Cores: " << coreCount << std::endl;
-    // } 
-    else {
-        std::cerr << "Error: Unknown scheduler_type in config.txt: " << schedulerTypeStr << std::endl;
-        std::cerr << "Supported types: FCFS" << std::endl;
-        return; 
+    if (!scheduler || scheduler->getAlgorithmType() == SchedulerAlgorithmType::NONE) {
+        std::cerr << "Error: Scheduler is not initialized or algorithm is not set. Use 'initialize' command first." << std::endl;
+        return;
     }
 
     if (scheduler) {
         scheduler->start();
         schedulerStarted = true;
-        std::cout << "Scheduler initialized and started successfully!" << std::endl;
+        std::cout << "Scheduler started successfully!" << std::endl;
     } else {
-        std::cerr << "Error: Scheduler could not be created or configured." << std::endl;
+        std::cerr << "Error: Scheduler instance is not available." << std::endl;
     }
 }
+
 void ConsoleManager::stopScheduler() {
     if (scheduler && schedulerStarted) {
         scheduler->stop();
@@ -259,6 +253,6 @@ void ConsoleManager::stopScheduler() {
     }
 }
 
-Scheduler* ConsoleManager::getScheduler() {
+Scheduler* ConsoleManager::getScheduler() const {
     return scheduler.get();
 }

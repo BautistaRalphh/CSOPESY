@@ -1,9 +1,8 @@
 #pragma once
 
-#include "ConsoleManager.h"
 #include "ProcessConsole.h" 
-#include "MainConsole.h"    
-#include "Process.h"       
+#include "MainConsole.h"
+#include "Process.h"
 #include "Scheduler.h"
 
 #include <string>
@@ -15,7 +14,9 @@
 #include <memory>
 #include <atomic> 
 
+class AConsole;
 class ProcessConsole;
+class Scheduler;
 
 class ConsoleManager {
 private:
@@ -35,9 +36,11 @@ private:
     std::string getTimestamp();
 
     std::unique_ptr<Scheduler> scheduler;
-    bool schedulerStarted = false;
+    bool schedulerStarted = false; 
 
+public: 
     bool readConfigFile(const std::string& filename, std::map<std::string, std::string>& config);
+
 public:
     static ConsoleManager* getInstance(); 
 
@@ -45,7 +48,9 @@ public:
     void handleCommand(const std::string& command);
     void drawConsole();
     void setExitApp(bool val);
-    bool applicationExit() const;
+    bool getExitApp() const; 
+
+    void initializeSystem(int numCpus, SchedulerAlgorithmType type); 
 
     bool createProcessConsole(const std::string& name);
     void switchToProcessConsole(const std::string& name);
@@ -59,6 +64,5 @@ public:
 
     void startScheduler();
     void stopScheduler(); 
-    Scheduler* getScheduler();
-
+    Scheduler* getScheduler() const;
 };

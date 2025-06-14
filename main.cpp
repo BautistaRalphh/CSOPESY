@@ -3,13 +3,11 @@
 #include <string>
 
 int main() {
-    int coreCount = 4;
-
     ConsoleManager* consoleManager = ConsoleManager::getInstance();
 
     std::string command;
 
-    while (!consoleManager->applicationExit()) {
+    while (!consoleManager->getExitApp()) {
         consoleManager->drawConsole();
 
         std::getline(std::cin, command);

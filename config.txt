@@ -1,2 +1,2 @@
-scheduler_type = FCFS
-core_count = 6
+num-cpu = 4
+scheduler = FCFS

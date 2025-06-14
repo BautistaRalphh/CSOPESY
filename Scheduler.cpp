@@ -62,6 +62,11 @@ void Scheduler::setAlgorithmType(SchedulerAlgorithmType type) {
     currentAlgorithm = type;
 }
 
+SchedulerAlgorithmType Scheduler::getAlgorithmType() const {
+    std::lock_guard<std::mutex> lock(mtx); 
+    return currentAlgorithm;
+}
+
 // Returns the total number of CPU cores the scheduler manages
 int Scheduler::getTotalCores() const {
     return coreAvailable.size();

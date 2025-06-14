@@ -34,8 +34,54 @@ void MainConsole::handleCommand(const std::string& command) {
 
     if (!initialized) {
         if (command == "initialize") {
+            std::map<std::string, std::string> config;
+            if (!ConsoleManager::getInstance()->readConfigFile("config.txt", config)) {
+                std::cerr << "Failed to load system configuration from config.txt." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            int numCpus = 0;
+            try {
+                numCpus = std::stoi(config["num-cpu"]);
+                if (numCpus <= 0) {
+                    std::cerr << "Error: 'num-cpu' must be a positive integer in config.txt. Found: " << config["num-cpu"] << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                }
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Error: Invalid 'num-cpu' value in config.txt. Must be an integer." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            } catch (const std::out_of_range& e) {
+                std::cerr << "Error: 'num-cpu' value out of range in config.txt." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            std::string schedulerTypeStr = config["scheduler"];
+            SchedulerAlgorithmType algoType = SchedulerAlgorithmType::NONE;
+
+            if (schedulerTypeStr == "FCFS") {
+                algoType = SchedulerAlgorithmType::FCFS;
+            }
+            // Add more scheduler types here as they are implemented
+            // else if (schedulerTypeStr == "RoundRobin") { algoType = SchedulerAlgorithmType::ROUND_ROBIN; }
+            else {
+                std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
+                std::cerr << "Supported types: FCFS" << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            if (algoType == SchedulerAlgorithmType::NONE) { 
+                 std::cerr << "Error: Scheduler algorithm not correctly determined from config." << std::endl;
+                 std::cout << "Initialization failed." << std::endl;
+                 return;
+            }
+
+            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType);
             initialized = true;
-            std::cout << "Console initialized" << std::endl;
         } else {
             std::cout << "Please type 'initialize' first before using other commands." << std::endl;
         }
@@ -163,9 +209,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
         std::cout << "'report-util' command recognized. Doing something." << std::endl;
     } else if (command == "clear") {
         onEnabled(); 
-    } else if (command == "exit") {
-        std::cout << "Exiting CSOPESY." << std::endl;
-        ConsoleManager::getInstance()->setExitApp(true);
     } else {
         std::cout << "Unknown command: " << command << std::endl;
     }
