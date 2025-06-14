@@ -11,11 +11,12 @@ Welcome to the CSOPESY project! This repository contains the code for a process 
 ## Features
 
 * **Main Command Recognition:** The Main Console Accepts and acknowledges the following commands:
-    * `initialize`: Not yet implemented
+    * `initialize`: Initializes the console based on the config.txt file.
     * `screen -s <name>`: Creates a new process and puts the user in the process console.
     * `screen -r <name>`: Redirects the user to the process they want to go to.
     * `scheduler-test`: Not yet implemented
-    * `scheduler-stop`: Not yet implemented
+    * `scheduler-start`: Starts the scheduling algorithm.
+    * `scheduler-stop`: Stops the scheduling algorithm.
     * `report-util`: Not yet implemented 
     * `clear`: Clears the terminal screen and reprints the header.
     * `exit`: Closes the command-line emulator.
