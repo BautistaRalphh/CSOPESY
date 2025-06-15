@@ -10,23 +10,48 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
-#include <random>    
+#include <random>
 #include <filesystem>
-#include <map>     
+#include <map>
 #include <fstream>
+#include <mutex>
 
 ConsoleManager* ConsoleManager::instance = nullptr;
-
+static std::atomic<int> autoProcessCounter(0); 
 static std::atomic<long> pidCounter(0);
 
-ConsoleManager::ConsoleManager() : activeConsole(nullptr), exitApp(false), schedulerStarted(false) {
-    mainConsole = std::make_unique<MainConsole>();
+static std::string generatePid() {
+    return "PID" + std::to_string(pidCounter.fetch_add(1));
+}
+
+static std::string generateAutoProcessName() {
+    return "process_" + std::to_string(autoProcessCounter.fetch_add(1));
+}
+
+ConsoleManager::ConsoleManager()
+    : activeConsole(nullptr),
+      exitApp(false),
+      processes(),
+      processConsoleScreens(),
+      scheduler(nullptr),
+      schedulerStarted(false),
+      batchProcessFrequency(0),
+      batchGenThread(nullptr),
+      batchGenRunning(false),
+      nextBatchTickTarget(0),
+      cpuCyclesPtr(nullptr),
+      mainConsole(std::make_unique<MainConsole>())
+{
     setActiveConsole(mainConsole.get());
 }
 
 ConsoleManager* ConsoleManager::getInstance() {
     if (instance == nullptr) {
-        instance = new ConsoleManager(); 
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+        if (instance == nullptr) {
+            instance = new ConsoleManager();
+        }
     }
     return instance;
 }
@@ -74,7 +99,7 @@ bool ConsoleManager::doesProcessExist(const std::string& name) const {
 const Process* ConsoleManager::getProcess(const std::string& name) const {
     auto it = processes.find(name);
     if (it != processes.end()) {
-        return &(it->second); 
+        return &(it->second);
     }
     return nullptr;
 }
@@ -88,11 +113,7 @@ Process* ConsoleManager::getProcessMutable(const std::string& name) {
 }
 
 std::map<std::string, Process> ConsoleManager::getAllProcesses() const {
-    return processes; 
-}
-
-static std::string generatePid() {
-    return "PID" + std::to_string(pidCounter.fetch_add(1));
+    return processes;
 }
 
 bool ConsoleManager::createProcessConsole(const std::string& name) {
@@ -102,23 +123,23 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     }
 
     Process newProcess(name, generatePid(), getTimestamp());
-    newProcess.setStatus(ProcessStatus::NEW); 
+    newProcess.setStatus(ProcessStatus::NEW);
     newProcess.setCpuCoreExecuting(-1);
-    newProcess.setFinishTime("N/A"); 
+    newProcess.setFinishTime("N/A");
 
     newProcess.generateDummyPrintCommands(100, "Hello world from " + name);
 
-    processes[name] = newProcess; 
+    processes[name] = newProcess;
 
-    Process* processInMap = &(processes.at(name)); 
+    Process* processInMap = &(processes.at(name));
 
-    scheduler->addProcess(processInMap);
+    if (scheduler) {
+        scheduler->addProcess(processInMap);
+    } else {
+        std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
+    }
 
-    processConsoleScreens[name] = std::make_unique<ProcessConsole>(processInMap); 
-
-    std::cout << "Process '" << name << "' (PID: " << processInMap->getPid() << ") created." << std::endl;
-    // Note: We are NOT immediately switching to the process console here for `screen -s`.
-    // The MainConsole's handleCommand will redraw its prompt unless switched.
+    processConsoleScreens[name] = std::make_unique<ProcessConsole>(processInMap);
     return true;
 }
 
@@ -128,7 +149,7 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
         return;
     }
 
-    Process* processData = getProcessMutable(name); 
+    Process* processData = getProcessMutable(name);
     if (!processData) {
         std::cout << "Error: Process data for '" << name << "' not found internally (mutable access failed)." << std::endl;
         return;
@@ -137,8 +158,8 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
     auto it = processConsoleScreens.find(name);
     if (it != processConsoleScreens.end()) {
         ProcessConsole* pc = it->second.get();
-        pc->updateProcessData(processData); 
-        setActiveConsole(pc); 
+        pc->updateProcessData(processData);
+        setActiveConsole(pc);
     } else {
         std::cout << "Process data for '" << name << "' found, but console screen not managed. Creating new screen." << std::endl;
         processConsoleScreens[name] = std::make_unique<ProcessConsole>(processData);
@@ -162,7 +183,7 @@ bool ConsoleManager::readConfigFile(const std::string& filename, std::map<std::s
         line.erase(0, line.find_first_not_of(" \t\r\n"));
         line.erase(line.find_last_not_of(" \t\r\n") + 1);
 
-        if (line.empty() || line[0] == '#') { 
+        if (line.empty() || line[0] == '#') {
             continue;
         }
 
@@ -183,20 +204,88 @@ bool ConsoleManager::readConfigFile(const std::string& filename, std::map<std::s
     return true;
 }
 
-void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type) {
-    if (scheduler && scheduler->isRunning()) {
+void ConsoleManager::setCpuCyclesCounter(std::atomic<long long>* counterPtr) {
+    cpuCyclesPtr = counterPtr;
+}
+
+void ConsoleManager::createBatchProcess() {
+    static std::mutex createBatchProcessMtx;
+    std::lock_guard<std::mutex> lock(createBatchProcessMtx);
+    std::string processName = generateAutoProcessName();
+    createProcessConsole(processName);
+}
+
+void ConsoleManager::batchGenLoop() {
+    while (batchGenRunning.load()) {
+        if (cpuCyclesPtr) {
+            long long currentCpuCycles = cpuCyclesPtr->load();
+
+            if (currentCpuCycles >= nextBatchTickTarget) {
+                createBatchProcess();
+                nextBatchTickTarget += batchProcessFrequency;
+
+                while (currentCpuCycles >= nextBatchTickTarget) {
+                    createBatchProcess();
+                    nextBatchTickTarget += batchProcessFrequency;
+                }
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+void ConsoleManager::startBatchGen() {
+    if (batchGenRunning.load()) {
+        std::cout << "[INFO] Batch process generation thread already running." << std::endl;
+        return;
+    }
+    if (!cpuCyclesPtr || batchProcessFrequency <= 0) {
+        std::cerr << "[ERROR] Cannot start batch process generation: CPU Cycles counter not set or frequency not valid." << std::endl;
+        return;
+    }
+
+    batchGenRunning.store(true);
+    nextBatchTickTarget = cpuCyclesPtr->load() + batchProcessFrequency;
+
+    batchGenThread = std::make_unique<std::thread>(&ConsoleManager::batchGenLoop, this);
+    std::cout << "[INFO] Batch process generation thread started." << std::endl;
+}
+
+void ConsoleManager::stopBatchGen() {
+    if (batchGenRunning.load()) {
+        batchGenRunning.store(false);
+        if (batchGenThread && batchGenThread->joinable()) {
+            batchGenThread->join();
+            batchGenThread.reset();
+            std::cout << "[INFO] Batch process generation thread stopped." << std::endl;
+        }
+    }
+}
+
+void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq) {
+    if (schedulerStarted.load()) {
         std::cout << "Scheduler is already running. Please stop it before re-initializing." << std::endl;
         return;
     }
 
-    if (scheduler) {
-        scheduler.reset(); 
-        schedulerStarted = false; 
+    if (batchGenRunning.load()) {
+        stopBatchGen();
     }
-    
+
+    if (scheduler) {
+        scheduler.reset();
+    }
+
     scheduler = std::make_unique<Scheduler>(numCpus);
-    
     scheduler->setAlgorithmType(type);
+
+    batchProcessFrequency = batchFreq;
+
+    if (cpuCyclesPtr) { 
+        nextBatchTickTarget = cpuCyclesPtr->load() + batchProcessFrequency;
+    } else {
+        nextBatchTickTarget = batchProcessFrequency;
+    }
 
     std::cout << "System initialized with " << numCpus << " CPUs and scheduler type: ";
     switch(type) {
@@ -206,48 +295,52 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type) 
         case SchedulerAlgorithmType::NONE:
             std::cout << "NONE (algorithm not set)";
             break;
-        // Add cases for other algorithm types (e.g., ROUND_ROBIN) here
-        // case SchedulerAlgorithmType::ROUND_ROBIN:
-        //     std::cout << "Round Robin";
-        //     break;
     }
     std::cout << "." << std::endl;
 
+    if (batchProcessFrequency > 0) {
+        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " cpuCycles (frame passes)." << std::endl;
+    } else {
+        std::cout << "Batch process generation is disabled." << std::endl;
+    }
 }
 
 void ConsoleManager::startScheduler() {
-    if (schedulerStarted) {
+    if (schedulerStarted.load()) {
         std::cout << "Scheduler is already running." << std::endl;
         return;
     }
-    
+
     if (!scheduler || scheduler->getAlgorithmType() == SchedulerAlgorithmType::NONE) {
         std::cerr << "Error: Scheduler is not initialized or algorithm is not set. Use 'initialize' command first." << std::endl;
         return;
     }
 
-    if (scheduler) {
-        scheduler->start();
-        schedulerStarted = true;
-        std::cout << "Scheduler started successfully!" << std::endl;
-    } else {
-        std::cerr << "Error: Scheduler instance is not available." << std::endl;
+    scheduler->start();
+    schedulerStarted.store(true);
+
+    if (batchProcessFrequency > 0) {
+        startBatchGen();
     }
 }
 
 void ConsoleManager::stopScheduler() {
-    if (scheduler && schedulerStarted) {
-        scheduler->stop();
-        schedulerStarted = false;
+    if (schedulerStarted.load()) {
+        stopBatchGen();
+
+        if (scheduler) {
+            scheduler->stop();
+            schedulerStarted.store(false);
+        }
 
         for (auto& pair : processes) {
-            Process& p = pair.second; 
+            Process& p = pair.second;
             if (p.getStatus() == ProcessStatus::RUNNING) {
                 p.setStatus(ProcessStatus::PAUSED);
-                p.setCpuCoreExecuting(-1); 
+                p.setCpuCoreExecuting(-1);
             }
         }
-        
+        std::cout << "Scheduler stopped." << std::endl;
     } else if (!scheduler) {
         std::cerr << "[ERROR] Scheduler is not initialized." << std::endl;
     } else {

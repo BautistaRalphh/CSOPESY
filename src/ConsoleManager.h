@@ -36,21 +36,29 @@ private:
     std::string getTimestamp();
 
     std::unique_ptr<Scheduler> scheduler;
-    bool schedulerStarted = false; 
+    std::atomic<bool> schedulerStarted{false}; 
 
-public: 
-    bool readConfigFile(const std::string& filename, std::map<std::string, std::string>& config);
+    int batchProcessFrequency;
+    std::unique_ptr<std::thread> batchGenThread;
+    std::atomic<bool> batchGenRunning;         
+    long long nextBatchTickTarget;            
 
+    std::atomic<long long>* cpuCyclesPtr = nullptr; 
+
+    void createBatchProcess();   
+    void batchGenLoop();        
+    void startBatchGen();
 public:
     static ConsoleManager* getInstance(); 
 
+    bool readConfigFile(const std::string& filename, std::map<std::string, std::string>& config);
     void setActiveConsole(AConsole* console);
     void handleCommand(const std::string& command);
     void drawConsole();
     void setExitApp(bool val);
     bool getExitApp() const; 
 
-    void initializeSystem(int numCpus, SchedulerAlgorithmType type); 
+    void initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq);
 
     bool createProcessConsole(const std::string& name);
     void switchToProcessConsole(const std::string& name);
@@ -65,4 +73,7 @@ public:
     void startScheduler();
     void stopScheduler(); 
     Scheduler* getScheduler() const;
+
+    void setCpuCyclesCounter(std::atomic<long long>* counterPtr);
+    void stopBatchGen();
 };

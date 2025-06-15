@@ -30,6 +30,7 @@ void MainConsole::handleCommand(const std::string& command) {
     if (command == "exit") {
         std::cout << "Exiting CSOPESY." << std::endl;
         ConsoleManager::getInstance()->setExitApp(true);
+        ConsoleManager::getInstance()->stopBatchGen();
         return;
     }
 
@@ -66,8 +67,6 @@ void MainConsole::handleCommand(const std::string& command) {
             if (schedulerTypeStr == "FCFS") {
                 algoType = SchedulerAlgorithmType::FCFS;
             }
-            // Add more scheduler types here as they are implemented
-            // else if (schedulerTypeStr == "RoundRobin") { algoType = SchedulerAlgorithmType::ROUND_ROBIN; }
             else {
                 std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
                 std::cerr << "Supported types: FCFS" << std::endl;
@@ -75,13 +74,33 @@ void MainConsole::handleCommand(const std::string& command) {
                 return;
             }
 
-            if (algoType == SchedulerAlgorithmType::NONE) { 
-                 std::cerr << "Error: Scheduler algorithm not correctly determined from config." << std::endl;
-                 std::cout << "Initialization failed." << std::endl;
-                 return;
+            if (algoType == SchedulerAlgorithmType::NONE) {
+                std::cerr << "Error: Scheduler algorithm not correctly determined from config." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
             }
 
-            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType);
+            int batchProcessFreq = 0;
+            auto it_freq = config.find("batch-process-freq");
+            if (it_freq != config.end()) {
+                try {
+                    batchProcessFreq = std::stoi(it_freq->second);
+                    if (batchProcessFreq <= 0) {
+                        std::cerr << "Warning: 'batch-process-freq' must be a positive integer. Auto-generation disabled." << std::endl;
+                        batchProcessFreq = 0;
+                    }
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Warning: Invalid 'batch-process-freq' value. Auto-generation disabled." << std::endl;
+                    batchProcessFreq = 0;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Warning: 'batch-process-freq' value out of range. Auto-generation disabled." << std::endl;
+                    batchProcessFreq = 0;
+                }
+            } else {
+                std::cout << "Info: 'batch-process-freq' not found in config.txt. Auto-generation disabled." << std::endl;
+            }
+
+            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType, batchProcessFreq);
             initialized = true;
         } else {
             std::cout << "Please type 'initialize' first before using other commands." << std::endl;

@@ -1,2 +1,3 @@
 num-cpu = 4
 scheduler = FCFS
+batch-process-freq = 1

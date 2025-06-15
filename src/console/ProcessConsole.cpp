@@ -1,6 +1,6 @@
 #include "ProcessConsole.h"
 #include "ConsoleManager.h"
-#include "Process.h"  
+#include "core/Process.h"  
 
 #include <iostream>
 #include <iomanip>          
@@ -28,7 +28,6 @@ void ProcessConsole::handleCommand(const std::string& command) {
         }
         system("cls");
         displayProcessInfo(); 
-        display();
     } else if (command == "exit") {
         std::cout << "Exiting process screen for " << currentProcessData->getProcessName() << std::endl;
         std::cout << std::flush;
