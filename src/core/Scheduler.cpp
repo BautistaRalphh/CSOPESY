@@ -173,6 +173,10 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 
                 proc->setStatus(ProcessStatus::FINISHED);
                 proc->setFinishTime(getCurrentTimestamp());
+
+                /* will be removed after h6 */
+                proc->writeSelfToLogFile();
+
                 markCoreAvailable(i);
             }).detach();
         }

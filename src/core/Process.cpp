@@ -2,6 +2,12 @@
 
 #include <iostream>
 
+
+/* will be removed after h6 */
+#include <fstream>
+/* will be removed after h6 */
+#include <filesystem>
+
 Process::Process(const std::string& name, const std::string& p_id, const std::string& c_time)
     : processName(name),
       pid(p_id),
@@ -51,6 +57,21 @@ void Process::generateDummyPrintCommands(int count, const std::string& baseMessa
         addCommand(cmd.str());
     }
 }
+
+/* will be removed after h6 */
+void Process::writeSelfToLogFile() const {
+    std::filesystem::create_directories("process_logs");
+    std::ofstream out("process_logs/" + getProcessName() + ".txt");
+    if (!out.is_open()) return;
+
+    out << "Process name: " << getProcessName() << "\n";
+    out << "Logs: \n\n";
+
+    for (auto& log : getLogEntries()) {
+        out << log << "\n";
+    }
+}
+
 
 const ParsedCommand* Process::getNextCommand() const {
     if (currentCommandIndex < commands.size()) {

@@ -84,4 +84,7 @@ public:
     const std::vector<std::string>& getLogEntries() const;
 
     bool doesVariableExist(const std::string& varName) const;
+
+    /* will be removed after h6 */
+    void writeSelfToLogFile() const;
 };

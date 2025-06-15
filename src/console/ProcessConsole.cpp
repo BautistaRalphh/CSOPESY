@@ -6,10 +6,6 @@
 #include <iomanip>          
 #include <cstdlib>
 
-/*will be removed after hw6*/
-#include <fstream>
-#include <filesystem>
-
 ProcessConsole::ProcessConsole(Process* processData) 
     : AConsole(processData->getProcessName()), currentProcessData(processData) {}
 
@@ -73,51 +69,7 @@ void ProcessConsole::displayProcessInfo() {
     } else {
         std::cout << "Logs: No logs recorded.\n";
     }
-
 }
-
-/* will be removed after hw6 (unfinished)*/
-void ProcessConsole::writeProcessInfoToFile() {
-    std::filesystem::create_directories("process_logs");
-
-    std::string filePath = "process_logs/" + currentProcessData->getProcessName() + ".txt";
-    std::ofstream out(filePath);
-
-    if (!out.is_open()) {
-        std::cerr << "Failed to write process info to file.\n";
-        return;
-    }
-
-    out << "Process Information" << std::endl;
-    out << "Name: " << currentProcessData->getProcessName() << std::endl;
-    out << "PID: " << currentProcessData->getPid() << std::endl;
-    out << "Status: ";
-    switch (currentProcessData->getStatus()) {
-        case ProcessStatus::NEW: out << "NEW"; break;
-        case ProcessStatus::IDLE: out << "IDLE"; break;
-        case ProcessStatus::RUNNING: out << "RUNNING"; break;
-        case ProcessStatus::FINISHED: out << "FINISHED"; break;
-        case ProcessStatus::PAUSED: out << "PAUSED"; break;
-    }
-    out << std::endl;
-    out << "CPU Core: " << currentProcessData->getCpuCoreExecuting() << std::endl;
-    out << "Commands Executed: " << currentProcessData->getCurrentCommandIndex() << std::endl;
-    out << "Total Commands: " << currentProcessData->getTotalInstructionLines() << std::endl;
-    out << "Creation Time: " << currentProcessData->getCreationTime() << std::endl;
-    out << "Finish Time: " << currentProcessData->getFinishTime() << std::endl;
-    out << std::endl;
-
-    const auto& logs = currentProcessData->getLogEntries();
-    if (!logs.empty()) {
-        out << "Logs:\n";
-        for (const std::string& log : logs) {
-            out << "  " << log << std::endl;
-        }
-    } else {
-        out << "Logs: No logs recorded.\n";
-    }
-}
-
 
 void ProcessConsole::updateProcessData(Process* newData) {
     currentProcessData = newData; 
