@@ -139,7 +139,7 @@ std::string Scheduler::getCurrentTimestamp() {
     std::tm localTime = *std::localtime(&now_c);
 
     char buffer[64];
-    std::strftime(buffer, sizeof(buffer), "(%m/%d/%Y %I:%M:%S%p)", &localTime);
+    std::strftime(buffer, sizeof(buffer), "%m/%d/%Y %I:%M:%S%p", &localTime);
     return std::string(buffer);
 }
 
@@ -163,7 +163,7 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 
                     if (cmd->type == CommandType::PRINT && !cmd->args.empty()) {
                         std::stringstream log;
-                        log << getCurrentTimestamp() << " Core:" << i << " \"" << cmd->args[0] << "\"";
+                        log << "(" << getCurrentTimestamp() << ") Core:" << i << " \"" << cmd->args[0] << "\"";
                         proc->addLogEntry(log.str());
                     }
 
@@ -175,7 +175,7 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                 proc->setFinishTime(getCurrentTimestamp());
 
                 /* will be removed after h6 */
-                proc->writeSelfToLogFile();
+                proc->writeToTextFile();
 
                 markCoreAvailable(i);
             }).detach();

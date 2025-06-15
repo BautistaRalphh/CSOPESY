@@ -86,5 +86,5 @@ public:
     bool doesVariableExist(const std::string& varName) const;
 
     /* will be removed after h6 */
-    void writeSelfToLogFile() const;
+    void writeToTextFile() const;
 };

@@ -59,7 +59,7 @@ void Process::generateDummyPrintCommands(int count, const std::string& baseMessa
 }
 
 /* will be removed after h6 */
-void Process::writeSelfToLogFile() const {
+void Process::writeToTextFile() const {
     std::filesystem::create_directories("process_logs");
     std::ofstream out("process_logs/" + getProcessName() + ".txt");
     if (!out.is_open()) return;
