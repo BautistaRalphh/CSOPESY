@@ -133,6 +133,16 @@ void Scheduler::runSchedulingLoop() {
     }
 }
 
+std::string Scheduler::getCurrentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm localTime = *std::localtime(&now_c);
+
+    char buffer[64];
+    std::strftime(buffer, sizeof(buffer), "(%m/%d/%Y %I:%M:%S%p)", &localTime);
+    return std::string(buffer);
+}
+
 void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
     for (int i = 0; i < coreAvailable.size(); ++i) {
         if (coreAvailable[i] && !processQueue.empty()) {
@@ -141,6 +151,8 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 
             proc->setCpuCoreExecuting(i);
             proc->setStatus(ProcessStatus::RUNNING);
+            proc->setCreationTime(getCurrentTimestamp());
+
             coreAvailable[i] = false;
 
             std::thread([this, proc, i]() {
@@ -150,18 +162,8 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                     proc->setCurrentCommandIndex(cmdIndex);
 
                     if (cmd->type == CommandType::PRINT && !cmd->args.empty()) {
-                        auto now = std::chrono::system_clock::now();
-                        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-                        std::tm localTime = *std::localtime(&now_c);
-
-                        char buffer[64];
-                        std::strftime(buffer, sizeof(buffer), "(%d/%m/%Y %I:%M:%S%p)", &localTime);
-
                         std::stringstream log;
-                        log << buffer << " Core:" << i << " \"" << cmd->args[0] << "\"";
-
-                        // debug  std::cout << log.str() << std::endl;
-
+                        log << getCurrentTimestamp() << " Core:" << i << " \"" << cmd->args[0] << "\"";
                         proc->addLogEntry(log.str());
                     }
 
@@ -170,6 +172,7 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                 }
 
                 proc->setStatus(ProcessStatus::FINISHED);
+                proc->setFinishTime(getCurrentTimestamp());
                 markCoreAvailable(i);
             }).detach();
         }

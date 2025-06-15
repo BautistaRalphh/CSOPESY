@@ -18,4 +18,7 @@ public:
     void handleCommand(const std::string& command) override; 
 
     void updateProcessData(Process* newData); 
+
+    /*will be removed after hw6*/
+    void writeProcessInfoToFile();
 };

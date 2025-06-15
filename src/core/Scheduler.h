@@ -44,6 +44,8 @@ private:
     void _runFCFSLogic(std::unique_lock<std::mutex>& lock);
     // void _runRoundRobinLogic(std::unique_lock<std::mutex>& lock);
 
+    std::string getCurrentTimestamp();
+
     std::vector<bool> coreAvailable;
     std::queue<Process*> processQueue;
 
