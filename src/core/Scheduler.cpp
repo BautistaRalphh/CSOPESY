@@ -147,17 +147,26 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                 int cmdIndex = 0;
 
                 while (const ParsedCommand* cmd = proc->getNextCommand()) {
-                    while (proc->getStatus() == ProcessStatus::PAUSED) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                    }
-
-                    proc->setStatus(ProcessStatus::RUNNING);
                     proc->setCurrentCommandIndex(cmdIndex);
 
-                    // std::cout << "DEBUG: FCFS assigning " << proc->getProcessName() << " to core " << i << std::endl;
+                    if (cmd->type == CommandType::PRINT && !cmd->args.empty()) {
+                        auto now = std::chrono::system_clock::now();
+                        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+                        std::tm localTime = *std::localtime(&now_c);
 
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        char buffer[64];
+                        std::strftime(buffer, sizeof(buffer), "(%d/%m/%Y %I:%M:%S%p)", &localTime);
+
+                        std::stringstream log;
+                        log << buffer << " Core:" << i << " \"" << cmd->args[0] << "\"";
+
+                        // debug  std::cout << log.str() << std::endl;
+
+                        proc->addLogEntry(log.str());
+                    }
+
                     ++cmdIndex;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
 
                 proc->setStatus(ProcessStatus::FINISHED);

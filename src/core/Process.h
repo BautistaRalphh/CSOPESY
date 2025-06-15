@@ -47,6 +47,7 @@ private:
     std::string finishTime;
 
     std::map<std::string, uint16_t> variables;
+    std::vector<std::string> executionLog;
 
 public:
     Process(const std::string& name = "", const std::string& p_id = "", const std::string& c_time = "");
@@ -78,5 +79,9 @@ public:
     void declareVariable(const std::string& varName, uint16_t value = 0);
     bool getVariableValue(const std::string& varName, uint16_t& value) const;
     void setVariableValue(const std::string& varName, uint16_t value);
+
+    void addLogEntry(const std::string& log);
+    const std::vector<std::string>& getLogEntries() const;
+
     bool doesVariableExist(const std::string& varName) const;
 };

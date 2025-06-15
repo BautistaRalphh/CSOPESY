@@ -47,7 +47,7 @@ void Process::generateDummyPrintCommands(int count, const std::string& baseMessa
     for (int i = 0; i < count; ++i) {
         std::ostringstream cmd;
         // Example: "print Instruction N for ProcessName"
-        cmd << "PRINT " << baseMessage << " " << (i + 1);
+        cmd << "PRINT " << baseMessage;
         addCommand(cmd.str());
     }
 }
@@ -93,6 +93,14 @@ void Process::setVariableValue(const std::string& varName, uint16_t value) {
 
 std::string Process::getCreationTime() const {
     return creationTime;
+}
+
+void Process::addLogEntry(const std::string& log) {
+    executionLog.push_back(log);
+}
+
+const std::vector<std::string>& Process::getLogEntries() const {
+    return executionLog;
 }
 
 bool Process::doesVariableExist(const std::string& varName) const {

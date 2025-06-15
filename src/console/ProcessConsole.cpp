@@ -59,6 +59,17 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << "Finish Time: " << currentProcessData->getFinishTime() << std::endl; 
     std::cout << "\033[0m";
     std::cout << std::endl;
+
+    const auto& logs = currentProcessData->getLogEntries();
+    if (!logs.empty()) {
+        std::cout << "Logs:\n";
+        for (const std::string& log : logs) {
+            std::cout << "  " << log << std::endl;
+        }
+    } else {
+        std::cout << "Logs: No logs recorded.\n";
+    }
+
 }
 
 void ProcessConsole::updateProcessData(Process* newData) {
