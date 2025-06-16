@@ -4,8 +4,14 @@
 #include <iostream>  
 #include <numeric>
 
-// Init core states and flags
-Scheduler::Scheduler(int coreCount) : coreAvailable(coreCount, true), running(false), currentAlgorithm(SchedulerAlgorithmType::NONE) {}
+Scheduler::Scheduler(int coreCount)
+    : numCores(coreCount), 
+      coreAvailable(coreCount, true),
+      running(false),
+      currentAlgorithm(SchedulerAlgorithmType::NONE),
+      processQueues(coreCount),
+      nextCoreForNewProcess(0) 
+{}
 
 Scheduler::~Scheduler() {
     stop();
@@ -14,7 +20,12 @@ Scheduler::~Scheduler() {
 // Queue a new process
 void Scheduler::addProcess(Process* process) {
     std::lock_guard<std::mutex> lock(mtx);
-    processQueue.push(process); 
+    if (numCores > 0) {
+        processQueues[nextCoreForNewProcess].push(process); 
+        nextCoreForNewProcess = (nextCoreForNewProcess + 1) % numCores;
+    } else {
+        std::cerr << "[ERROR] Cannot add process: Scheduler configured with 0 cores." << std::endl;
+    }
     cv.notify_all();
 }
 
@@ -112,14 +123,27 @@ bool Scheduler::isRunning() const {
 }
 
 void Scheduler::runSchedulingLoop() {
-    while (true) {
+    while (running.load()) {
         std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [&] { 
-            return !running || !processQueue.empty(); 
+        cv.wait(lock, [&] {
+            if (!running.load()) return true; 
+            for (int i = 0; i < numCores; ++i) {
+                if (coreAvailable[i] && !processQueues[i].empty()) { 
+                    return true;
+                }
+            }
+            return false; 
         });
 
-        if (!running && processQueue.empty()) { 
-            break; 
+        if (!running.load() && getCoresUsed() == getTotalCores()) { 
+            bool allQueuesEmpty = true;
+            for(int i = 0; i < numCores; ++i) {
+                if (!processQueues[i].empty()) {
+                    allQueuesEmpty = false;
+                    break;
+                }
+            }
+            if(allQueuesEmpty) break;
         }
 
         switch (currentAlgorithm) {
@@ -128,6 +152,8 @@ void Scheduler::runSchedulingLoop() {
                 break;
             case SchedulerAlgorithmType::NONE:
                 std::cerr << "[WARNING] Scheduler loop running with no algorithm selected." << std::endl;
+                lock.unlock();
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 break;
         }
     }
@@ -144,16 +170,15 @@ std::string Scheduler::getCurrentTimestamp() {
 }
 
 void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
-    for (int i = 0; i < coreAvailable.size(); ++i) {
-        if (coreAvailable[i] && !processQueue.empty()) {
-            Process* proc = processQueue.front();
-            processQueue.pop();
+    for (int i = 0; i < numCores; ++i) { 
+        if (coreAvailable[i] && !processQueues[i].empty()) { 
+            Process* proc = processQueues[i].front(); 
+            processQueues[i].pop(); 
 
             proc->setCpuCoreExecuting(i);
             proc->setStatus(ProcessStatus::RUNNING);
-            proc->setCreationTime(getCurrentTimestamp());
 
-            coreAvailable[i] = false;
+            coreAvailable[i] = false; 
 
             std::thread([this, proc, i]() {
                 int cmdIndex = 0;
@@ -168,17 +193,17 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                     }
 
                     ++cmdIndex;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
                 }
 
                 proc->setStatus(ProcessStatus::FINISHED);
                 proc->setFinishTime(getCurrentTimestamp());
 
-                /* will be removed after h6 */
-                proc->writeToTextFile();
+                proc->writeToTextFile(); // Will be removed after hw6
 
-                markCoreAvailable(i);
+                markCoreAvailable(i); 
             }).detach();
+
         }
     }
 }

@@ -85,11 +85,13 @@ bool ConsoleManager::getExitApp() const {
 }
 
 std::string ConsoleManager::getTimestamp() {
-    std::time_t now = std::time(nullptr);
-    std::tm* ltm = std::localtime(&now);
-    std::ostringstream oss;
-    oss << std::put_time(ltm, "%Y-%m-%d %H:%M:%S");
-    return oss.str();
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm localTime = *std::localtime(&now_c);
+
+    char buffer[64];
+    std::strftime(buffer, sizeof(buffer), "%m/%d/%Y %I:%M:%S%p", &localTime);
+    return std::string(buffer);
 }
 
 bool ConsoleManager::doesProcessExist(const std::string& name) const {
@@ -299,7 +301,7 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     std::cout << "." << std::endl;
 
     if (batchProcessFrequency > 0) {
-        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " cpuCycles (frame passes)." << std::endl;
+        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " CPU Cycles." << std::endl;
     } else {
         std::cout << "Batch process generation is disabled." << std::endl;
     }

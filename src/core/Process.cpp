@@ -48,7 +48,6 @@ void Process::addCommand(const std::string& rawCommand) {
     totalInstructionLines = commands.size();
 }
 
-
 void Process::generateDummyPrintCommands(int count, const std::string& baseMessage) {
     for (int i = 0; i < count; ++i) {
         std::ostringstream cmd;
@@ -71,7 +70,6 @@ void Process::writeToTextFile() const {
         out << log << "\n";
     }
 }
-
 
 const ParsedCommand* Process::getNextCommand() const {
     if (currentCommandIndex < commands.size()) {
