@@ -164,8 +164,9 @@ Example 1: FOR [PRINT A; SLEEP 1] 2
 Example 2: FOR [PRINT A]
 
 =====================================================================*/
-void Process::generateDummyCommands(int count) {
+void Process::generateDummyCommands(int count, const std::string& processName) {
     for (int i = 0; i < count; ++i) {
+        
         //to do: PUT RANDOMIZER HERE
 
 
@@ -173,7 +174,7 @@ void Process::generateDummyCommands(int count) {
 
         //FOR TESTING ONLY
         //============================================================
-        addCommand("PRINT Hello world from <process_name>!"); // to do: make process_name appear | Print should appear when inside a proccess
+        addCommand("PRINT Hello world from " + processName + "!"); // to do: make process_name appear | Print should appear when inside a proccess
         addCommand("DECLARE x 10");
         addCommand("DECLARE y 20");
         addCommand("ADD sum x y");
