@@ -131,8 +131,6 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
 
     newProcess.generateDummyCommands(1);
 
-    //newProcess.generateDummyPrintCommands(1, "Hello world from " + name);
-
     processes[name] = newProcess;
 
     Process* processInMap = &(processes.at(name));

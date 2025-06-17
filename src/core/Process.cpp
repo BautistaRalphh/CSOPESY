@@ -41,7 +41,7 @@ void Process::addCommand(const std::string& rawCommand) {
             restOfLine = restOfLine.substr(1);
         }
 
-        args.push_back(restOfLine);  // Store full message as one string
+        args.push_back(restOfLine);
     }
     else if (commandTypeStr == "DECLARE") {
         type = CommandType::DECLARE;
@@ -131,18 +131,6 @@ std::string Process::trim(const std::string& str) {
     return (first == std::string::npos) ? "" : str.substr(first, last - first + 1);
 }
 
-
-/*to be removed*/
-void Process::generateDummyPrintCommands(int count, const std::string& baseMessage) {
-    for (int i = 0; i < count; ++i) {
-        std::ostringstream cmd;
-        // Example: "print Instruction N for ProcessName"
-        cmd << "PRINT " << baseMessage;
-        addCommand(cmd.str());
-    }
-}
-
-
 /*======================= COMMAND SYNTAX FORMAT =======================
 -----------------------------------
 Put inside addCommand("")
@@ -202,7 +190,7 @@ void Process::generateDummyCommands(int count) {
         addCommand("DECLARE one 1");
         addCommand("FOR [ADD counter counter one; PRINT inc++] 5");
         addCommand("PRINT Done looping.");
-        addCommand("PRINT Loop Counter: (counter)");  // Will literally print the word "counter" unless printing variables is supported
+        addCommand("PRINT Loop Counter: (counter)");
         addCommand("PRINT ---------------------------");
 
         }

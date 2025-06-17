@@ -45,7 +45,7 @@ private:
     ProcessStatus status;
     int cpuCoreExecuting;
     std::string finishTime;
-    
+
     std::vector<std::string> splitInstructions(const std::string& block);
     std::string trim(const std::string& str);
 
@@ -58,7 +58,6 @@ public:
     void addCommand(const std::string& rawCommand);
 
     
-    void generateDummyPrintCommands(int count, const std::string& baseMessage);
     void generateDummyCommands(int count);
 
     const std::string& getPid() const { return pid; }
