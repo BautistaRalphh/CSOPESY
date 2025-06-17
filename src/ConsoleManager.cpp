@@ -131,7 +131,7 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
 
     newProcess.generateDummyCommands(1);
 
-    //newProcess.generateDummyPrintCommands(100, "Hello world from " + name);
+    //newProcess.generateDummyPrintCommands(1, "Hello world from " + name);
 
     processes[name] = newProcess;
 

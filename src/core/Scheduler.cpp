@@ -170,7 +170,7 @@ std::string Scheduler::getCurrentTimestamp() {
 }
 
 void Scheduler::executeProcessCommands(Process* proc, int coreId) {
-    int cmdIndex = 0;
+    int cmdIndex = 1;
 
     while (const ParsedCommand* cmd = proc->getNextCommand()) {
         proc->setCurrentCommandIndex(cmdIndex);

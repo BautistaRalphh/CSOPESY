@@ -67,11 +67,7 @@ void Process::addCommand(const std::string& rawCommand) {
         ss >> ticks;
         args.push_back(ticks);
     }
-    // Future: Implement parsing for DECLARE, ADD, SUBTRACT, SLEEP, FOR
-    // else if (commandTypeStr == "DECLARE") { ... }
-    // else if (commandTypeStr == "ADD") { ... }
-    // ...
-
+    //for loop here
     commands.emplace_back(type, args);
     totalInstructionLines = commands.size();
 }
@@ -88,24 +84,26 @@ void Process::generateDummyPrintCommands(int count, const std::string& baseMessa
 }
 
 void Process::generateDummyCommands(int count) {
-    addCommand("SLEEP 20"); // to be fixed: 1st command dupe bug
-    addCommand("DECLARE A 10");
-    addCommand("DECLARE B 5");
-    addCommand("DECLARE X 100");
+    for (int i = 0; i < count; ++i) {
+        addCommand("SLEEP 20");
+        addCommand("DECLARE A 10");
+        addCommand("DECLARE B 5");
+        addCommand("DECLARE X 100");
 
-    addCommand("ADD C A B"); 
-    addCommand("SUBTRACT Y A X");
+        addCommand("ADD C A B"); 
+        addCommand("SUBTRACT Y A X");
 
-    addCommand("PRINT Starting dummy program...");
-    addCommand("PRINT A is (A)");
-    addCommand("PRINT B is (B)");
-    addCommand("PRINT C is (C)");
-    addCommand("PRINT D is (X)");
-    addCommand("PRINT Y is (Y) testtttttttttttttt");
+        addCommand("PRINT Starting dummy program...");
+        addCommand("PRINT A is (A)");
+        addCommand("PRINT B is (B)");
+        addCommand("PRINT C is (C)");
+        addCommand("PRINT D is (X)");
+        addCommand("PRINT Y is (Y) testtttttttttttttt");
 
-    addCommand("SLEEP 20");
+        addCommand("SLEEP 20");
 
-    addCommand("PRINT Dummy program complete.");
+        addCommand("PRINT Dummy program complete.");
+    }
 }
 
 /* will be removed after h6 */
