@@ -166,7 +166,14 @@ Example 2: FOR [PRINT A]
 =====================================================================*/
 void Process::generateDummyCommands(int count) {
     for (int i = 0; i < count; ++i) {
-        addCommand("PRINT Hello, World!");
+        //to do: PUT RANDOMIZER HERE
+
+
+
+
+        //FOR TESTING ONLY
+        //============================================================
+        addCommand("PRINT Hello world from <process_name>!"); // to do: make process_name appear | Print should appear when inside a proccess
         addCommand("DECLARE x 10");
         addCommand("DECLARE y 20");
         addCommand("ADD sum x y");
@@ -192,7 +199,7 @@ void Process::generateDummyCommands(int count) {
         addCommand("PRINT Done looping.");
         addCommand("PRINT Loop Counter: (counter)");
         addCommand("PRINT ---------------------------");
-
+        //============================================================
         }
 }
 

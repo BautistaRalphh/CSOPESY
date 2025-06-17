@@ -199,7 +199,11 @@ void Scheduler::executeProcessCommands(Process* proc, int coreId) {
                         }
                     }
 
-                    log << "\"" << finalMsg.str() << "\"";
+                    std::string msgStr = finalMsg.str();
+                    if (!msgStr.empty() && msgStr.back() == ' ') {
+                        msgStr.pop_back(); // remove trailing space
+                    }
+                    log << "\"" << msgStr << "\"";
                     proc->addLogEntry(log.str());
                 }
                 break;

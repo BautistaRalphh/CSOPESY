@@ -129,7 +129,7 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     newProcess.setCpuCoreExecuting(-1);
     newProcess.setFinishTime("N/A");
 
-    newProcess.generateDummyCommands(1);
+    newProcess.generateDummyCommands(1); // to do: randomized count here
 
     processes[name] = newProcess;
 
