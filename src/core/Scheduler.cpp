@@ -169,6 +169,109 @@ std::string Scheduler::getCurrentTimestamp() {
     return std::string(buffer);
 }
 
+void Scheduler::executeProcessCommands(Process* proc, int coreId) {
+    int cmdIndex = 0;
+
+    while (const ParsedCommand* cmd = proc->getNextCommand()) {
+        proc->setCurrentCommandIndex(cmdIndex);
+        std::stringstream log;
+        log << "(" << getCurrentTimestamp() << ") Core:" << coreId << " ";
+
+        switch (cmd->type) {
+            case CommandType::PRINT:
+                if (!cmd->args.empty()) {
+                    std::string rawMsg = cmd->args[0];
+                    std::stringstream finalMsg;
+                    std::stringstream tokenStream(rawMsg);
+                    std::string word;
+
+                    while (tokenStream >> word) {
+                        if (word.front() == '(' && word.back() == ')') {
+                            std::string varName = word.substr(1, word.size() - 2);
+                            uint16_t value;
+                            if (proc->getVariableValue(varName, value)) {
+                                finalMsg << value << " ";
+                            } else {
+                                finalMsg << "[undef:" << varName << "] ";
+                            }
+                        } else {
+                            finalMsg << word << " ";
+                        }
+                    }
+
+                    log << finalMsg.str();
+                    proc->addLogEntry(log.str());
+                }
+                break;
+
+            case CommandType::DECLARE:
+                if (cmd->args.size() == 2) {
+                    const std::string& var = cmd->args[0];
+                    uint16_t val = static_cast<uint16_t>(std::stoi(cmd->args[1]));
+                    proc->declareVariable(var, val);
+                    log << "Declared " << var << " = " << val;
+                    proc->addLogEntry(log.str());
+                }
+                break;
+
+            case CommandType::ADD:
+                if (cmd->args.size() == 3) {
+                    const std::string& var1 = cmd->args[0];
+                    const std::string& var2 = cmd->args[1];
+                    const std::string& dest = cmd->args[2];
+
+                    uint16_t val1, val2;
+                    if (proc->getVariableValue(var1, val1) && proc->getVariableValue(var2, val2)) {
+                        uint16_t result = val1 + val2;
+                        proc->declareVariable(dest, result);
+                        log << "ADD " << var1 << "(" << val1 << ") + " << var2 << "(" << val2 << ") = " << dest << "(" << result << ")";
+                    } else {
+                        log << "ADD failed: One or more variables not found.";
+                    }
+                    proc->addLogEntry(log.str());
+                }
+                break;
+
+            case CommandType::SUBTRACT:
+                if (cmd->args.size() == 3) {
+                    const std::string& var1 = cmd->args[0];
+                    const std::string& var2 = cmd->args[1];
+                    const std::string& dest = cmd->args[2];
+
+                    uint16_t val1, val2;
+                    if (proc->getVariableValue(var1, val1) && proc->getVariableValue(var2, val2)) {
+                        uint16_t result = val1 - val2;
+                        proc->declareVariable(dest, result);
+                        log << "SUBTRACT " << var1 << "(" << val1 << ") - " << var2 << "(" << val2 << ") = " << dest << "(" << result << ")";
+                    } else {
+                        log << "SUBTRACT failed: One or more variables not found.";
+                    }
+                    proc->addLogEntry(log.str());
+                }
+                break;
+
+
+
+            case CommandType::SLEEP:
+                if (!cmd->args.empty()) {
+                    int ticks = std::stoi(cmd->args[0]);
+                    log << "Sleeping for " << ticks << " ticks...";
+                    proc->addLogEntry(log.str());
+                    std::this_thread::sleep_for(std::chrono::milliseconds(ticks * 100));
+                }
+                break;
+
+            default:
+                log << "Unknown or unhandled command.";
+                proc->addLogEntry(log.str());
+                break;
+        }
+
+        ++cmdIndex;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
 void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
     for (int i = 0; i < numCores; ++i) { 
         if (coreAvailable[i] && !processQueues[i].empty()) { 
@@ -180,30 +283,14 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 
             coreAvailable[i] = false; 
 
-            std::thread([this, proc, i]() {
-                int cmdIndex = 0;
+        std::thread([this, proc, i]() {
+            executeProcessCommands(proc, i);
 
-                while (const ParsedCommand* cmd = proc->getNextCommand()) {
-                    proc->setCurrentCommandIndex(cmdIndex);
-
-                    if (cmd->type == CommandType::PRINT && !cmd->args.empty()) {
-                        std::stringstream log;
-                        log << "(" << getCurrentTimestamp() << ") Core:" << i << " \"" << cmd->args[0] << "\"";
-                        proc->addLogEntry(log.str());
-                    }
-
-                    ++cmdIndex;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
-                }
-
-                proc->setStatus(ProcessStatus::FINISHED);
-                proc->setFinishTime(getCurrentTimestamp());
-
-                proc->writeToTextFile(); // Will be removed after hw6
-
-                markCoreAvailable(i); 
+            proc->setStatus(ProcessStatus::FINISHED);
+            proc->setFinishTime(getCurrentTimestamp());
+            proc->writeToTextFile(); // Will be removed after hw6
+            markCoreAvailable(i);
             }).detach();
-
         }
     }
 }

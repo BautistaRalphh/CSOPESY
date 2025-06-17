@@ -51,6 +51,8 @@ private:
     std::vector<std::queue<Process*>> processQueues;
     int nextCoreForNewProcess;                      // Counter for round-robin assignment of new processes
 
+    void executeProcessCommands(Process* proc, int coreId);
+
     mutable std::mutex mtx;
     mutable std::condition_variable cv;
     std::thread schedulerThread;

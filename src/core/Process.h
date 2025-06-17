@@ -54,6 +54,7 @@ public:
 
     void addCommand(const std::string& rawCommand);
     void generateDummyPrintCommands(int count, const std::string& baseMessage);
+    void generateDummyCommands(int count);
 
     const std::string& getPid() const { return pid; }
     const std::string& getProcessName() const { return processName; }

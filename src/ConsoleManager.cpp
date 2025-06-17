@@ -129,7 +129,9 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     newProcess.setCpuCoreExecuting(-1);
     newProcess.setFinishTime("N/A");
 
-    newProcess.generateDummyPrintCommands(100, "Hello world from " + name);
+    newProcess.generateDummyCommands(1);
+
+    //newProcess.generateDummyPrintCommands(100, "Hello world from " + name);
 
     processes[name] = newProcess;
 
