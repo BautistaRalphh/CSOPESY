@@ -199,7 +199,7 @@ void Scheduler::executeProcessCommands(Process* proc, int coreId) {
                         }
                     }
 
-                    log << finalMsg.str();
+                    log << "\"" << finalMsg.str() << "\"";
                     proc->addLogEntry(log.str());
                 }
                 break;

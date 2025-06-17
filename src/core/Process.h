@@ -20,7 +20,7 @@ enum class CommandType {
     ADD,
     SUBTRACT,
     SLEEP,
-    FOR_LOOP,
+    FOR,
     UNKNOWN
 };
 
@@ -45,6 +45,9 @@ private:
     ProcessStatus status;
     int cpuCoreExecuting;
     std::string finishTime;
+    
+    std::vector<std::string> splitInstructions(const std::string& block);
+    std::string trim(const std::string& str);
 
     std::map<std::string, uint16_t> variables;
     std::vector<std::string> executionLog;
@@ -53,6 +56,8 @@ public:
     Process(const std::string& name = "", const std::string& p_id = "", const std::string& c_time = "");
 
     void addCommand(const std::string& rawCommand);
+
+    
     void generateDummyPrintCommands(int count, const std::string& baseMessage);
     void generateDummyCommands(int count);
 
