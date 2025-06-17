@@ -32,28 +32,77 @@ void Process::addCommand(const std::string& rawCommand) {
 
     if (commandTypeStr == "PRINT") {
         type = CommandType::PRINT;
-        std::string message;
-        std::getline(ss, message);
-        if (!message.empty() && message[0] == ' ') {
-            message = message.substr(1);
-        }
-        args.push_back(message);
-    }
-    // Future: Implement parsing for DECLARE, ADD, SUBTRACT, SLEEP, FOR
-    // else if (commandTypeStr == "DECLARE") { ... }
-    // else if (commandTypeStr == "ADD") { ... }
-    // ...
 
+        std::string restOfLine;
+        std::getline(ss, restOfLine);
+        if (!restOfLine.empty() && restOfLine[0] == ' ') {
+            restOfLine = restOfLine.substr(1);
+        }
+
+        args.push_back(restOfLine);  // Store full message as one string
+    }
+    else if (commandTypeStr == "DECLARE") {
+        type = CommandType::DECLARE;
+        std::string var;
+        uint16_t val;
+        ss >> var >> val;
+        args.push_back(var);
+        args.push_back(std::to_string(val));
+    }
+    else if (commandTypeStr == "ADD") {
+        type = CommandType::ADD;
+        std::string var1, var2, var3;
+        ss >> var1 >> var2 >> var3;
+        args = { var1, var2, var3 };
+    }
+    else if (commandTypeStr == "SUBTRACT") {
+        type = CommandType::SUBTRACT;
+        std::string var1, var2, var3;
+        ss >> var1 >> var2 >> var3;
+        args = { var1, var2, var3 };
+    }
+    else if (commandTypeStr == "SLEEP") {
+        type = CommandType::SLEEP;
+        std::string ticks;
+        ss >> ticks;
+        args.push_back(ticks);
+    }
+    //for loop here
     commands.emplace_back(type, args);
     totalInstructionLines = commands.size();
 }
 
+
+/*to be removed*/
 void Process::generateDummyPrintCommands(int count, const std::string& baseMessage) {
     for (int i = 0; i < count; ++i) {
         std::ostringstream cmd;
         // Example: "print Instruction N for ProcessName"
         cmd << "PRINT " << baseMessage;
         addCommand(cmd.str());
+    }
+}
+
+void Process::generateDummyCommands(int count) {
+    for (int i = 0; i < count; ++i) {
+        addCommand("SLEEP 20");
+        addCommand("DECLARE A 10");
+        addCommand("DECLARE B 5");
+        addCommand("DECLARE X 100");
+
+        addCommand("ADD C A B"); 
+        addCommand("SUBTRACT Y A X");
+
+        addCommand("PRINT Starting dummy program...");
+        addCommand("PRINT A is (A)");
+        addCommand("PRINT B is (B)");
+        addCommand("PRINT C is (C)");
+        addCommand("PRINT D is (X)");
+        addCommand("PRINT Y is (Y) testtttttttttttttt");
+
+        addCommand("SLEEP 20");
+
+        addCommand("PRINT Dummy program complete.");
     }
 }
 
