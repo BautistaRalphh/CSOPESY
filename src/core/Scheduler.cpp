@@ -216,40 +216,63 @@ void Scheduler::executeProcessCommands(Process* proc, int coreId) {
 
             case CommandType::ADD:
                 if (cmd->args.size() == 3) {
-                    const std::string& var1 = cmd->args[0];
-                    const std::string& var2 = cmd->args[1];
-                    const std::string& dest = cmd->args[2];
+                    const std::string& dest = cmd->args[0];
+                    const std::string& src1 = cmd->args[1];
+                    const std::string& src2 = cmd->args[2];
 
                     uint16_t val1, val2;
-                    if (proc->getVariableValue(var1, val1) && proc->getVariableValue(var2, val2)) {
-                        uint16_t result = val1 + val2;
-                        proc->declareVariable(dest, result);
-                        log << "ADD " << var1 << "(" << val1 << ") + " << var2 << "(" << val2 << ") = " << dest << "(" << result << ")";
-                    } else {
-                        log << "ADD failed: One or more variables not found.";
-                    }
+
+                    auto getOrDeclare = [&](const std::string& name, uint16_t& value) {
+                        if (!proc->getVariableValue(name, value)) {
+                            if (name.find_first_not_of("0123456789") == std::string::npos) {
+                                value = static_cast<uint16_t>(std::stoi(name));
+                            } else {
+                                // declare and set value = 0 if var does not exist
+                                value = 0;
+                                proc->declareVariable(name, value);
+                            }
+                        }
+                    };
+
+                    getOrDeclare(src1, val1);
+                    getOrDeclare(src2, val2);
+
+                    uint16_t result = val1 + val2;
+                    proc->declareVariable(dest, result);
+                    log << "ADD " << dest << " = " << src1 << "(" << val1 << ") + " << src2 << "(" << val2 << ") => " << dest << "(" << result << ")";
                     proc->addLogEntry(log.str());
                 }
                 break;
 
             case CommandType::SUBTRACT:
                 if (cmd->args.size() == 3) {
-                    const std::string& var1 = cmd->args[0];
-                    const std::string& var2 = cmd->args[1];
-                    const std::string& dest = cmd->args[2];
+                    const std::string& dest = cmd->args[0];
+                    const std::string& src1 = cmd->args[1];
+                    const std::string& src2 = cmd->args[2];
 
                     uint16_t val1, val2;
-                    if (proc->getVariableValue(var1, val1) && proc->getVariableValue(var2, val2)) {
-                        uint16_t result = val1 - val2;
-                        proc->declareVariable(dest, result);
-                        log << "SUBTRACT " << var1 << "(" << val1 << ") - " << var2 << "(" << val2 << ") = " << dest << "(" << result << ")";
-                    } else {
-                        log << "SUBTRACT failed: One or more variables not found.";
-                    }
+
+                    auto getOrDeclare = [&](const std::string& name, uint16_t& value) {
+                        if (!proc->getVariableValue(name, value)) {
+                            if (name.find_first_not_of("0123456789") == std::string::npos) {
+                                value = static_cast<uint16_t>(std::stoi(name));
+                            } else {
+                                // declare and set value = 0 if var does not exist
+                                value = 0;
+                                proc->declareVariable(name, value);
+                            }
+                        }
+                    };
+
+                    getOrDeclare(src1, val1);
+                    getOrDeclare(src2, val2);
+
+                    uint16_t result = val1 - val2;
+                    proc->declareVariable(dest, result);
+                    log << "SUBTRACT " << dest << " = " << src1 << "(" << val1 << ") - " << src2 << "(" << val2 << ") => " << dest << "(" << result << ")";
                     proc->addLogEntry(log.str());
                 }
                 break;
-
 
 
             case CommandType::SLEEP:
