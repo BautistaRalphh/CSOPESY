@@ -115,7 +115,6 @@ public:
     const std::vector<std::string>& getLogEntries() const;
 
     bool doesVariableExist(const std::string& varName) const;
-    std::string resolvePrintMessage(const std::string& message) const;
 
     bool isSleeping() const;
     void setSleeping(bool value);

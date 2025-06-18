@@ -163,13 +163,7 @@ std::string Scheduler::getCurrentTimestamp() {
     std::time_t now_c = std::chrono::system_clock::to_time_t(now);
 
     std::tm localTime;
-    #ifdef _WIN32
-        localtime_s(&localTime, &now_c);
-    #else
-        if (localtime_r(&now_c, &localTime) == nullptr) {
-            std::cerr << "Error getting local time." << std::endl;
-        }
-    #endif
+    localtime_s(&localTime, &now_c);
 
     char buffer[64];
     std::strftime(buffer, sizeof(buffer), "%m/%d/%Y %I:%M:%S%p", &localTime);
@@ -263,8 +257,7 @@ bool Scheduler::executeSingleCommand(Process* proc, int coreId) {
         switch (cmd->type) {
             case CommandType::PRINT: {
                 if (!cmd->args.empty()) {
-                    std::string resolvedMsg = proc->resolvePrintMessage(cmd->args[0]);
-                    commandToLog = "PRINT " + resolvedMsg;
+                    commandToLog = "PRINT " + cmd->args[0];
                     proc->addLogEntry(log.str() + commandToLog);
                 }
                 commandExecuted = true;

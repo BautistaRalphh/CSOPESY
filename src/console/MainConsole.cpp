@@ -248,6 +248,11 @@ void MainConsole::handleMainCommands(const std::string& command) {
             int coresUsed = scheduler->getCoresUsed();             
             int coresAvailable = scheduler->getCoresAvailable();    
             double cpuUtilization = scheduler->getCpuUtilization();
+
+            std::cout << " Total Cores: " << totalCores << std::endl;
+            std::cout << " Cores Used: " << coresUsed << std::endl;
+            std::cout << " Cores Available: " << coresAvailable << std::endl;
+            std::cout << " CPU Utilization: " << std::fixed << std::setprecision(2) << cpuUtilization << "%" << std::endl;
         } else {
             std::cout << " Scheduler is not running. Use 'scheduler-start' to activate." << std::endl; std::cout << std::flush;
         }

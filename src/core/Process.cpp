@@ -190,7 +190,7 @@ void Process::generateRandomCommands(int count) {
             
             switch (loopBodySelectedType) {
                 case CommandType::PRINT:
-                    body_cmd_oss << "PRINT \"Loop (depth " << currentNestingDepth << "): " << " iter " << j << " val " << distrib_loop_print_val(gen) << "\"";
+                    body_cmd_oss << "PRINT \"Hello world from " << processName << "!\"";
                     break;
                 case CommandType::ADD:
                 case CommandType::SUBTRACT: {
@@ -281,10 +281,7 @@ void Process::generateRandomCommands(int count) {
         
         switch (selectedType) {
             case CommandType::PRINT: {
-                int messageType = rand() % 3;
-                if (messageType == 0) cmd_oss << "PRINT \"Msg: " << processName << " cmd " << commands.size() << "\"";
-                else if (messageType == 1) cmd_oss << "PRINT \"Value is " << distrib_val(gen) << "\"";
-                else cmd_oss << "PRINT \"Current overall command: " << commands.size() << "\"";
+                cmd_oss << "PRINT \"Hello world from " << processName << "!\"";
                 addCommand(cmd_oss.str());
                 break;
             }
@@ -361,28 +358,6 @@ void Process::generateRandomCommands(int count) {
     totalInstructionLines = commands.size();
 }
 
-std::string Process::resolvePrintMessage(const std::string& message) const {
-    std::string resolved = message;
-    size_t startPos = 0;
-    while ((startPos = resolved.find('(', startPos)) != std::string::npos) {
-        size_t endPos = resolved.find(')', startPos);
-        if (endPos != std::string::npos) {
-            std::string varName = resolved.substr(startPos + 1, endPos - startPos - 1);
-            uint16_t value;
-            if (getVariableValue(varName, value)) {
-                resolved.replace(startPos, endPos - startPos + 1, std::to_string(value));
-                startPos += std::to_string(value).length();
-            } else {
-                resolved.replace(startPos, endPos - startPos + 1, "(UNDEFINED_VAR)");
-                startPos += std::string("(UNDEFINED_VAR)").length();
-            }
-        } else {
-            break;
-        }
-    }
-    return resolved;
-}
-
 const ParsedCommand* Process::getNextCommand() {
     if (currentCommandIndex >= commands.size() && loopStack.empty()) {
         return nullptr;
@@ -443,11 +418,11 @@ const ParsedCommand* Process::getNextCommand() {
 
                 if (initialConditionMet) {
                     loopStack.emplace(currentCommandIndex + 1,
-                                      endForIndex,
-                                      loopVarName,
-                                      startVal,
-                                      endVal,
-                                      stepVal);
+                                       endForIndex,
+                                       loopVarName,
+                                       startVal,
+                                       endVal,
+                                       stepVal);
                 } else {
                     currentCommandIndex = endForIndex; 
                 }
