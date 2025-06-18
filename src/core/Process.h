@@ -66,6 +66,9 @@ private:
     int cpuCoreExecuting;
     std::string finishTime;
 
+    std::vector<std::string> splitInstructions(const std::string& block);
+    std::string trim(const std::string& str);
+
     std::map<std::string, uint16_t> variables;
     std::vector<std::string> executionLog;
 

@@ -43,6 +43,8 @@ int Process::EndFor(int forCommandIndex) const {
 }
 
 void Process::addCommand(const std::string& rawCommand) {
+    static int forDepth = 0;
+
     std::stringstream ss(rawCommand);
     std::string commandTypeStr;
     ss >> commandTypeStr;
