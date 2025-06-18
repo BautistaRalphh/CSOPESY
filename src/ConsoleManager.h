@@ -44,12 +44,16 @@ private:
     long long nextBatchTickTarget;            
 
     std::atomic<long long>* cpuCyclesPtr = nullptr; 
+    uint32_t minInstructionsPerProcess;
+    uint32_t maxInstructionsPerProcess;
+    uint32_t processDelayPerExecution;
 
     void createBatchProcess();   
     void batchGenLoop();        
     void startBatchGen();
 public:
     static ConsoleManager* getInstance(); 
+    static void cleanupInstance();
 
     bool readConfigFile(const std::string& filename, std::map<std::string, std::string>& config);
     void setActiveConsole(AConsole* console);
@@ -58,14 +62,14 @@ public:
     void setExitApp(bool val);
     bool getExitApp() const; 
 
-    void initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq);
+    void initializeSystem(int numCpus, SchedulerAlgorithmType algoType, int batchProcessFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec);
 
     bool createProcessConsole(const std::string& name);
     void switchToProcessConsole(const std::string& name);
     bool doesProcessExist(const std::string& name) const;
     const Process* getProcess(const std::string& name) const;
     Process* getProcessMutable(const std::string& name);
-    std::map<std::string, Process> getAllProcesses() const; 
+    const std::map<std::string, Process>& getAllProcesses() const;
 
     std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;
@@ -76,4 +80,7 @@ public:
 
     void setCpuCyclesCounter(std::atomic<long long>* counterPtr);
     void stopBatchGen();
+
+    uint32_t getMinInstructionsPerProcess() const { return minInstructionsPerProcess; }
+    uint32_t getMaxInstructionsPerProcess() const { return maxInstructionsPerProcess; }
 };

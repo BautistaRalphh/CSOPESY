@@ -21,7 +21,7 @@ void ProcessConsole::display() {
 }
 
 void ProcessConsole::handleCommand(const std::string& command) {
-    if (command == "process -smi") {
+    if (command == "process-smi") {
         Process* latestData = ConsoleManager::getInstance()->getProcessMutable(currentProcessData->getProcessName());
         if (latestData) {
             updateProcessData(latestData); 
@@ -45,7 +45,7 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << "Status: ";
     switch (currentProcessData->getStatus()) { 
         case ProcessStatus::NEW: std::cout << "\033[36mNEW"; break;
-        case ProcessStatus::IDLE: std::cout << "IDLE"; break;
+        case ProcessStatus::READY: std::cout << "READY"; break;
         case ProcessStatus::RUNNING: std::cout << "\033[35mRUNNING\033[36m"; break; 
         case ProcessStatus::FINISHED: std::cout << "\033[31mFINISHED\033[36m"; break; 
         case ProcessStatus::PAUSED: std::cout << "\033[33mPAUSED\033[36m"; break; 

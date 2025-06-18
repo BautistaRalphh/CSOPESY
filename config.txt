@@ -1,3 +1,6 @@
 num-cpu = 4
 scheduler = FCFS
 batch-process-freq = 0
+min-ins = 1000
+max-ins = 2000
+delays-per-exec = 1
