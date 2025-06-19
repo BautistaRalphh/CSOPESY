@@ -81,8 +81,9 @@ void MainConsole::handleCommand(const std::string& command) {
 
             if (schedulerTypeStr == "FCFS") {
                 algoType = SchedulerAlgorithmType::FCFS;
-            }
-            else {
+            } else if (schedulerTypeStr == "RR") {
+                algoType = SchedulerAlgorithmType::RR;
+            } else {
                 std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
                 std::cerr << "Supported types: FCFS" << std::endl;
                 std::cout << "Initialization failed." << std::endl;
