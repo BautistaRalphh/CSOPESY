@@ -420,6 +420,9 @@ void Scheduler::runSchedulingLoop() {
             case SchedulerAlgorithmType::FCFS:
                 _runFCFSLogic(lock);
                 break;
+            case SchedulerAlgorithmType::RR:
+                _runRoundRobinLogic(lock);
+                break;
             case SchedulerAlgorithmType::NONE:
                 std::cerr << "[WARNING] Scheduler loop running with no algorithm selected." << std::endl;
                 break;
@@ -484,6 +487,47 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                     _markCoreAvailableUnlocked(i);
                 }
             }
+        }
+    }
+}
+
+void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
+    const int timeSlice = 3;
+
+    for (int i = 0; i < numCores; ++i) {
+        if (coreAssignments[i] != nullptr) {
+            Process* proc = coreAssignments[i];
+
+            if (proc->getStatus() == ProcessStatus::RUNNING) {
+                int executed = 0;
+                while (executed < timeSlice) {
+                    if (!executeSingleCommand(proc, i)) break;
+                    ++executed;
+                    _advanceSimulatedTimeUnlocked(1 + delaysPerExecution);
+                }
+
+                if (proc->getStatus() == ProcessStatus::RUNNING) {
+                    proc->setStatus(ProcessStatus::READY);
+                    proc->setCpuCoreExecuting(-1);
+                    processQueues[i].push(proc);
+                }
+
+                _markCoreAvailableUnlocked(i);
+            }
+        }
+    }
+
+    for (int i = 0; i < numCores; ++i) {
+        if (coreAvailable[i] && !processQueues[i].empty()) {
+            Process* proc = processQueues[i].front();
+            processQueues[i].pop();
+
+            proc->setStatus(ProcessStatus::RUNNING);
+            proc->setCpuCoreExecuting(i);
+            coreAvailable[i] = false;
+            coreAssignments[i] = proc;
+
+            proc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(i) + " Process " + proc->getProcessName() +" (PID:" + proc->getPid() + ") dispatched.");
         }
     }
 }
