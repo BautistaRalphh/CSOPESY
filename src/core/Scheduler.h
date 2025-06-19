@@ -19,6 +19,7 @@ class Process;
 enum class SchedulerAlgorithmType {
     NONE,
     FCFS,
+    RR
 };
 
 struct SleepingProcess {
@@ -58,7 +59,7 @@ private:
 
     // Private functions for each algorithm's logic
     void _runFCFSLogic(std::unique_lock<std::mutex>& lock);
-    // void _runRoundRobinLogic(std::unique_lock<std::mutex>& lock);
+    void _runRoundRobinLogic(std::unique_lock<std::mutex>& lock);
 
     void _markCoreAvailableUnlocked(int core);
     void _addProcessUnlocked(Process* process);
