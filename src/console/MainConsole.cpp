@@ -79,13 +79,13 @@ void MainConsole::handleCommand(const std::string& command) {
             std::string schedulerTypeStr = config["scheduler"];
             SchedulerAlgorithmType algoType = SchedulerAlgorithmType::NONE;
 
-            if (schedulerTypeStr == "FCFS") {
-                algoType = SchedulerAlgorithmType::FCFS;
-            } else if (schedulerTypeStr == "RR") {
-                algoType = SchedulerAlgorithmType::RR;
+            if (schedulerTypeStr == "fcfs") {
+                algoType = SchedulerAlgorithmType::fcfs;
+            } else if (schedulerTypeStr == "rr") {
+                algoType = SchedulerAlgorithmType::rr;
             } else {
                 std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
-                std::cerr << "Supported types: FCFS" << std::endl;
+                std::cerr << "Supported types: fcfs, rr" << std::endl;
                 std::cout << "Initialization failed." << std::endl;
                 return;
             }
@@ -189,7 +189,31 @@ void MainConsole::handleCommand(const std::string& command) {
                 return;
             }
             
-            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType, batchProcessFreq, minIns, maxIns, delaysPerExec);
+            uint32_t quantumCycles = 0;
+            auto it_quantum_cycles = config.find("quantum-cycles");
+            if (it_quantum_cycles != config.end()) {
+                try {
+                    quantumCycles = static_cast<uint32_t>(std::stoul(it_quantum_cycles->second));
+                    if (quantumCycles <= 0) {
+                        std::cerr << "Error: 'quantum-cycles' must be a positive integer in config.txt. Found: " << it_quantum_cycles->second << std::endl;
+                        std::cout << "Initialization failed." << std::endl;
+                        return;
+                    }
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Error: Invalid 'quantum-cycles' value in config.txt. Must be an integer." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Error: 'quantum-cycles' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                }
+            } else {
+                std::cerr << "Error: 'quantum-cycles' not found in config.txt. Initialization failed." << std::endl;
+                return;
+            }
+            
+            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType, batchProcessFreq, minIns, maxIns, delaysPerExec, quantumCycles);
             initialized = true;
         } else {
             std::cout << "Please type 'initialize' first before using other commands." << std::endl;
@@ -233,7 +257,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
         for (const auto& pair : allProcesses) {
             const Process& p = pair.second; 
-            if (p.getStatus() == ProcessStatus::FINISHED) {
+            if (p.getStatus() == ProcessStatus::TERMINATED) {
                 finishedProcesses.push_back(&p); 
             } else {
                 activeProcesses.push_back(&p); 
@@ -266,7 +290,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
                     case ProcessStatus::READY: statusStr = "READY"; break;
                     case ProcessStatus::RUNNING: statusStr = "RUNNING"; break;
                     case ProcessStatus::PAUSED: statusStr = "PAUSED"; break; 
-                    case ProcessStatus::FINISHED: statusStr = "FINISHED"; break; 
+                    case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break; 
                     default: statusStr = "UNKNOWN"; break;
                 }
                 std::cout << " " << p_ptr->getProcessName() 
@@ -285,7 +309,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
             for (const auto* p_ptr : finishedProcesses) { 
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
-                                << "Status: " << "FINISHED" 
+                                << "Status: " << "TERMINATED" 
                                 << " Core: " << (p_ptr->getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p_ptr->getCpuCoreExecuting()))
                                 << " " << p_ptr->getCurrentCommandIndex() << "/" << p_ptr->getTotalInstructionLines() 
                                 << std::endl;
@@ -342,7 +366,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
         for (const auto& pair : allProcesses) {
             const Process& p = pair.second; 
-            if (p.getStatus() == ProcessStatus::FINISHED) {
+            if (p.getStatus() == ProcessStatus::TERMINATED) {
                 finishedProcesses.push_back(&p); 
             } else {
                 activeProcesses.push_back(&p); 
@@ -375,7 +399,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
                     case ProcessStatus::READY: statusStr = "READY"; break;
                     case ProcessStatus::RUNNING: statusStr = "RUNNING"; break;
                     case ProcessStatus::PAUSED: statusStr = "PAUSED"; break; 
-                    case ProcessStatus::FINISHED: statusStr = "FINISHED"; break; 
+                    case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break; 
                     default: statusStr = "UNKNOWN"; break;
                 }
                 std::cout << " " << p_ptr->getProcessName() 

@@ -47,6 +47,7 @@ private:
     uint32_t minInstructionsPerProcess;
     uint32_t maxInstructionsPerProcess;
     uint32_t processDelayPerExecution;
+    uint32_t quantumCycles;
 
     void createBatchProcess();   
     void batchGenLoop();        
@@ -62,7 +63,7 @@ public:
     void setExitApp(bool val);
     bool getExitApp() const; 
 
-    void initializeSystem(int numCpus, SchedulerAlgorithmType algoType, int batchProcessFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec);
+    void initializeSystem(int numCpus, SchedulerAlgorithmType algoType, int batchProcessFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec, uint32_t quantumCyc);
 
     bool createProcessConsole(const std::string& name);
     void switchToProcessConsole(const std::string& name);

@@ -17,7 +17,7 @@ enum class ProcessStatus {
     NEW,
     READY,
     RUNNING,
-    FINISHED,
+    TERMINATED,
     PAUSED 
 };
 

@@ -44,6 +44,7 @@ ConsoleManager::ConsoleManager()
       minInstructionsPerProcess(0),
       maxInstructionsPerProcess(0),
       processDelayPerExecution(0),
+      quantumCycles(0),
       mainConsole(std::make_unique<MainConsole>())
 {
     setActiveConsole(mainConsole.get());
@@ -278,8 +279,7 @@ void ConsoleManager::stopBatchGen() {
     }
 }
 
-void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq,
-                                      uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec) {
+void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec, uint32_t quantumCyc) {
     if (schedulerStarted.load()) {
         std::cout << "Scheduler is already running. Please stop it before re-initializing." << std::endl;
         return;
@@ -297,10 +297,12 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     scheduler->setAlgorithmType(type);
 
     scheduler->setDelaysPerExecution(delaysPerExec);
+    scheduler->setQuantumCycles(quantumCyc);
 
     this->minInstructionsPerProcess = minIns;
     this->maxInstructionsPerProcess = maxIns;
-    this->processDelayPerExecution = delaysPerExec; 
+    this->processDelayPerExecution = delaysPerExec;
+    this->quantumCycles = quantumCyc;
 
     batchProcessFrequency = batchFreq;
 
@@ -312,8 +314,11 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
 
     std::cout << "System initialized with " << numCpus << " CPUs and scheduler type: ";
     switch(type) {
-        case SchedulerAlgorithmType::FCFS:
+        case SchedulerAlgorithmType::fcfs:
             std::cout << "FCFS";
+            break;
+        case SchedulerAlgorithmType::rr:
+            std::cout << "Round Robin";
             break;
         case SchedulerAlgorithmType::NONE:
             std::cout << "NONE (algorithm not set)";
@@ -333,6 +338,7 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     } else {
         std::cout << "Delay per instruction execution: " << delaysPerExec << " CPU cycles." << std::endl;
     }
+    std::cout << "Quantum cycles for Round Robin: " << quantumCycles << " CPU cycles." << std::endl;
 }
 
 void ConsoleManager::startScheduler() {

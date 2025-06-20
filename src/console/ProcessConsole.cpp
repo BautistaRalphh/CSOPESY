@@ -47,7 +47,7 @@ void ProcessConsole::displayProcessInfo() {
         case ProcessStatus::NEW: std::cout << "\033[36mNEW"; break;
         case ProcessStatus::READY: std::cout << "READY"; break;
         case ProcessStatus::RUNNING: std::cout << "\033[35mRUNNING\033[36m"; break; 
-        case ProcessStatus::FINISHED: std::cout << "\033[31mFINISHED\033[36m"; break; 
+        case ProcessStatus::TERMINATED: std::cout << "\033[TERMINATED\033[36m"; break; 
         case ProcessStatus::PAUSED: std::cout << "\033[33mPAUSED\033[36m"; break; 
     }
     std::cout << "\033[0m" << std::endl; 

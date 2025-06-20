@@ -1,5 +1,6 @@
 num-cpu = 4
-scheduler = FCFS
+scheduler = rr
+quantum-cycles = 3
 batch-process-freq = 0
 min-ins = 1000
 max-ins = 2000

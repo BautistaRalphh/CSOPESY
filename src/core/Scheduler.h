@@ -18,8 +18,8 @@ class Process;
 
 enum class SchedulerAlgorithmType {
     NONE,
-    FCFS,
-    RR
+    fcfs,
+    rr
 };
 
 struct SleepingProcess {
@@ -53,7 +53,7 @@ public:
     void setDelaysPerExecution(uint32_t delays) { delaysPerExecution = delays; }
 
     uint32_t getDelaysPerExecution() const { return delaysPerExecution; }
-    
+    void setQuantumCycles(uint32_t quantum) { quantumCycles = quantum; }
 private:
     void runSchedulingLoop();                   // Scheduler thread loop
 
@@ -77,6 +77,7 @@ private:
     int numCores;
     std::vector<bool> coreAvailable;
     std::vector<std::queue<Process*>> processQueues;
+    std::queue<Process*> globalQueue;
     int nextCoreForNewProcess;                  
 
     mutable std::mutex mtx;
@@ -91,4 +92,5 @@ private:
 
     bool executeSingleCommand(Process* proc, int coreId);
     uint32_t delaysPerExecution;
+    uint32_t quantumCycles;
 };
