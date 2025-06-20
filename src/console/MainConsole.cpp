@@ -317,8 +317,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
         }
         std::cout.rdbuf(oldCout);
         std::cout << oss.str();
-    } else if (command == "scheduler-test") {
-        std::cout << "'scheduler-test' command recognized. Doing something." << std::endl;
     } else if (command == "scheduler-start") {
         ConsoleManager::getInstance()->startScheduler();
         std::cout << "Scheduler started." << std::endl;
