@@ -13,6 +13,7 @@
 #include <regex>
 #include <memory>
 #include <atomic> 
+#include <thread>
 
 class AConsole;
 class ProcessConsole;
@@ -43,7 +44,7 @@ private:
     std::atomic<bool> batchGenRunning;         
     long long nextBatchTickTarget;            
 
-    std::atomic<long long>* cpuCyclesPtr = nullptr; 
+    //std::atomic<long long>* cpuCyclesPtr = nullptr; 
     uint32_t minInstructionsPerProcess;
     uint32_t maxInstructionsPerProcess;
     uint32_t processDelayPerExecution;

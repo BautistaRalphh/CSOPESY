@@ -2,17 +2,12 @@
 #include <iostream>
 #include <string>
 
-std::atomic<long long> cpuCycles(0);
-
 int main() {
     ConsoleManager* consoleManager = ConsoleManager::getInstance();
-    consoleManager->setCpuCyclesCounter(&cpuCycles);
 
     std::string command;
 
     while (!consoleManager->getExitApp()) {
-
-        cpuCycles.fetch_add(1);
 
         consoleManager->drawConsole();
 
@@ -22,6 +17,10 @@ int main() {
 
         command.clear();
     }
-    
+    if (consoleManager->getScheduler() && consoleManager->getScheduler()->isRunning()) {
+        consoleManager->stopScheduler();
+    }
+    consoleManager->stopBatchGen();
+
     return 0;
 }

@@ -43,8 +43,6 @@ int Process::EndFor(int forCommandIndex) const {
 }
 
 void Process::addCommand(const std::string& rawCommand) {
-    static int forDepth = 0;
-
     std::stringstream ss(rawCommand);
     std::string commandTypeStr;
     ss >> commandTypeStr;
@@ -126,18 +124,14 @@ void Process::generateRandomCommands(int count) {
 
     std::uniform_int_distribution<int> distrib_cmd_type(0, possibleCommands.size() - 1);
     std::uniform_int_distribution<uint16_t> distrib_val(0, 255);
-    std::uniform_int_distribution<int> distrib_sleep_duration(0, 255);
     std::uniform_int_distribution<int> distrib_fixed_var_index(0, 9);
 
     std::uniform_int_distribution<int> distrib_for_start(0, 4);
     std::uniform_int_distribution<int> distrib_for_end_offset(1, 5);
     std::uniform_int_distribution<int> distrib_for_step(1, 2);
-    std::uniform_int_distribution<int> distrib_for_body_size(2, 5);
+    std::uniform_int_distribution<int> distrib_for_body_size(2, 5); 
 
-    std::uniform_int_distribution<int> distrib_loop_print_val(0, 99);
-    std::uniform_int_distribution<int> distrib_loop_sleep_duration(0, 255);
-
-    std::uniform_int_distribution<int> distrib_nesting_probability(0, 3);
+    std::uniform_int_distribution<int> distrib_nesting_probability(0, 3); // 0=no nesting, 1,2,3=nest
 
     std::set<std::string> declaredVariableNames;
 
@@ -151,23 +145,25 @@ void Process::generateRandomCommands(int count) {
             CommandType::SLEEP
         };
 
-        if (currentNestingDepth < 3) {
+        if (currentNestingDepth < 3) { 
             loopBodyPossibleCommands.push_back(CommandType::FOR);
         }
 
         std::uniform_int_distribution<int> distrib_loop_body_type(0, loopBodyPossibleCommands.size() - 1);
 
         for (int j = 0; j < commandsForThisBody; ++j) {
-            if (commands.size() >= count) return;
+            if (commands.size() >= count && currentNestingDepth == 0) {
+                 return;
+            }
 
             CommandType loopBodySelectedType = loopBodyPossibleCommands[distrib_loop_body_type(gen)];
             std::ostringstream body_cmd_oss;
 
             if (loopBodySelectedType == CommandType::FOR) {
                 if (currentNestingDepth < 3 && distrib_nesting_probability(gen) > currentNestingDepth) {
-                    int min_for_estimate = 1 + 1 + distrib_for_body_size.min();
-                    if ((commands.size() + min_for_estimate) >= count) {
-                        j--;
+                    int min_nested_for_block_size = 1 + distrib_for_body_size.min() + 1;
+                    if (commands.size() + min_nested_for_block_size > count + 5) { 
+                        j--; 
                         continue;
                     }
 
@@ -176,14 +172,15 @@ void Process::generateRandomCommands(int count) {
                     uint16_t nestedEnd = nestedStart + distrib_for_end_offset(gen);
                     uint16_t nestedStep = distrib_for_step(gen);
                     body_cmd_oss << "FOR " << nestedLoopVar << " " << nestedStart << " " << nestedEnd << " " << nestedStep;
-                    addCommand(body_cmd_oss.str());
+                    addCommand(body_cmd_oss.str()); 
 
                     int nestedBodySize = distrib_for_body_size(gen);
-                    generateLoopBody(currentNestingDepth + 1, nestedBodySize);
+                    generateLoopBody(currentNestingDepth + 1, nestedBodySize); 
 
-                    if (commands.size() < count) {
-                         addCommand("END_FOR");
-                    }
+                    addCommand("END_FOR"); 
+                    continue; 
+                } else {
+                    j--; 
                     continue;
                 }
             }
@@ -198,19 +195,16 @@ void Process::generateRandomCommands(int count) {
                     std::string var1, var2, destVar;
 
                     if (declaredVariableNames.empty()) {
-                        if (commands.size() + 3 >= count) {
-                            j--;
-                            continue;
-                        }
+                        if (commands.size() + 3 > count + 5) { j--; continue; }
                         var1 = "var" + std::to_string(varCounter++);
                         addCommand("DECLARE " + var1 + " " + std::to_string(distrib_val(gen)));
                         declaredVariableNames.insert(var1);
-                        if (commands.size() >= count) break;
+                        if (commands.size() >= count + 5) break;
 
                         var2 = "var" + std::to_string(varCounter++);
                         addCommand("DECLARE " + var2 + " " + std::to_string(distrib_val(gen)));
                         declaredVariableNames.insert(var2);
-                        if (commands.size() >= count) break;
+                        if (commands.size() >= count + 5) break;
                     } else {
                         std::vector<std::string> currentVars(declaredVariableNames.begin(), declaredVariableNames.end());
                         std::uniform_int_distribution<size_t> var_pick_dist(0, currentVars.size() - 1);
@@ -220,26 +214,27 @@ void Process::generateRandomCommands(int count) {
                     
                     destVar = "res" + std::to_string(distrib_fixed_var_index(gen));
                     if (declaredVariableNames.find(destVar) == declaredVariableNames.end()) {
-                         if (commands.size() + 1 >= count) {
-                             j--;
-                             continue;
-                         }
-                         addCommand("DECLARE " + destVar + " 0");
-                         declaredVariableNames.insert(destVar);
-                         if (commands.size() >= count) break;
+                        if (commands.size() + 1 > count + 5) { j--; continue; } 
+                        addCommand("DECLARE " + destVar + " 0");
+                        declaredVariableNames.insert(destVar);
+                        if (commands.size() >= count + 5) break;
                     }
 
                     body_cmd_oss << op << " " << var1 << " " << var2 << " " << destVar;
                     break;
                 }
                 case CommandType::SLEEP:
-                    body_cmd_oss << "SLEEP " << distrib_loop_sleep_duration(gen);
+                    body_cmd_oss << "SLEEP " << 10;
                     break;
                 default:
                     body_cmd_oss << "PRINT \"(Error: unexpected loop body command)\"";
                     break;
             }
-            addCommand(body_cmd_oss.str());
+            if (commands.size() < count + 5) {
+                addCommand(body_cmd_oss.str());
+            } else {
+                return;
+            }
         }
     };
 
@@ -256,12 +251,12 @@ void Process::generateRandomCommands(int count) {
         declaredVariableNames.insert(varName);
     }
     for (int i = 0; i <= distrib_fixed_var_index.max(); ++i) {
-         if (commands.size() >= count) break;
-         std::string resVarName = "res" + std::to_string(i);
-         if (declaredVariableNames.find(resVarName) == declaredVariableNames.end()) {
+        if (commands.size() >= count) break;
+        std::string resVarName = "res" + std::to_string(i);
+        if (declaredVariableNames.find(resVarName) == declaredVariableNames.end()) {
             addCommand("DECLARE " + resVarName + " 0");
             declaredVariableNames.insert(resVarName);
-         }
+        }
     }
 
     while (commands.size() < count) {
@@ -273,9 +268,9 @@ void Process::generateRandomCommands(int count) {
         }
 
         if (selectedType == CommandType::FOR) {
-            int min_for_for_estimate = 1 + 1 + distrib_for_body_size.min();
-            if ((commands.size() + min_for_for_estimate * (distrib_nesting_probability.max() + 1)) > count) {
-                continue;
+            int min_for_block_size = 1 + distrib_for_body_size.min() + 1;
+            if (commands.size() + min_for_block_size > count + 5) { 
+                continue; 
             }
         }
         
@@ -291,18 +286,16 @@ void Process::generateRandomCommands(int count) {
                 std::string var1, var2, destVar;
 
                 if (declaredVariableNames.empty()) {
-                    if (commands.size() + 3 >= count) {
-                        continue;
-                    }
+                    if (commands.size() + 3 > count + 5) { continue; }
                     var1 = "var" + std::to_string(varCounter++);
                     addCommand("DECLARE " + var1 + " " + std::to_string(distrib_val(gen)));
                     declaredVariableNames.insert(var1);
-                    if (commands.size() >= count) break;
+                    if (commands.size() >= count + 5) break;
 
                     var2 = "var" + std::to_string(varCounter++);
                     addCommand("DECLARE " + var2 + " " + std::to_string(distrib_val(gen)));
                     declaredVariableNames.insert(var2);
-                    if (commands.size() >= count) break;
+                    if (commands.size() >= count + 5) break;
                 } else {
                     std::vector<std::string> currentVars(declaredVariableNames.begin(), declaredVariableNames.end());
                     std::uniform_int_distribution<size_t> var_pick_dist(0, currentVars.size() - 1);
@@ -312,12 +305,10 @@ void Process::generateRandomCommands(int count) {
                 
                 destVar = "res" + std::to_string(distrib_fixed_var_index(gen));
                 if (declaredVariableNames.find(destVar) == declaredVariableNames.end()) {
-                    if (commands.size() + 1 >= count) {
-                        continue;
-                    }
+                    if (commands.size() + 1 > count + 5) { continue; } 
                     addCommand("DECLARE " + destVar + " 0");
                     declaredVariableNames.insert(destVar);
-                    if (commands.size() >= count) break;
+                    if (commands.size() >= count + 5) break;
                 }
 
                 cmd_oss << op << " " << var1 << " " << var2 << " " << destVar;
@@ -325,7 +316,7 @@ void Process::generateRandomCommands(int count) {
                 break;
             }
             case CommandType::SLEEP: {
-                int duration = distrib_sleep_duration(gen);
+                int duration = 10; 
                 cmd_oss << "SLEEP " << duration;
                 addCommand(cmd_oss.str());
                 break;
@@ -336,18 +327,16 @@ void Process::generateRandomCommands(int count) {
                 uint16_t end = start + distrib_for_end_offset(gen);
                 uint16_t step = distrib_for_step(gen);
                 cmd_oss << "FOR " << loopVar << " " << start << " " << end << " " << step;
-                addCommand(cmd_oss.str());
+                addCommand(cmd_oss.str()); 
 
                 int bodySize = distrib_for_body_size(gen);
-                generateLoopBody(1, bodySize);
+                generateLoopBody(1, bodySize); 
 
-                if (commands.size() < count) {
-                    addCommand("END_FOR");
-                }
+                addCommand("END_FOR"); 
                 break;
             }
             case CommandType::UNKNOWN:
-            case CommandType::END_FOR:
+            case CommandType::END_FOR: 
             default: {
                 cmd_oss << "PRINT \"(Unknown or invalid command generated.)\"";
                 addCommand(cmd_oss.str());
@@ -355,7 +344,7 @@ void Process::generateRandomCommands(int count) {
             }
         }
     }
-    totalInstructionLines = commands.size();
+    totalInstructionLines = commands.size(); // Final update of totalInstructionLines
 }
 
 const ParsedCommand* Process::getNextCommand() {
@@ -376,16 +365,19 @@ const ParsedCommand* Process::getNextCommand() {
             } else if (currentLoop.stepValue < 0) {
                 conditionMet = (currentLoop.currentLoopValue >= currentLoop.endValue);
             } else {
-                conditionMet = false;
+                conditionMet = (currentLoop.currentLoopValue == currentLoop.endValue && currentLoop.startValue == currentLoop.endValue);
+                if (currentLoop.startValue != currentLoop.endValue) {
+                    conditionMet = false; 
+                }
             }
 
             if (conditionMet) {
                 currentCommandIndex = currentLoop.startCommandIndex;
-                return &commands[currentCommandIndex++];
+                return &commands[currentCommandIndex++]; 
             } else {
                 loopStack.pop();
                 currentCommandIndex++; 
-                return getNextCommand();
+                return getNextCommand(); 
             }
         }
     }
@@ -413,24 +405,24 @@ const ParsedCommand* Process::getNextCommand() {
                 } else if (stepVal < 0) {
                     initialConditionMet = (startVal >= endVal);
                 } else {
-                    initialConditionMet = (startVal == endVal);
+                    initialConditionMet = (startVal == endVal); 
                 }
 
                 if (initialConditionMet) {
-                    loopStack.emplace(currentCommandIndex + 1,
-                                       endForIndex,
-                                       loopVarName,
-                                       startVal,
-                                       endVal,
-                                       stepVal);
+                    loopStack.emplace(currentCommandIndex + 1, 
+                                      endForIndex,             
+                                      loopVarName,
+                                      startVal,
+                                      endVal,
+                                      stepVal);
                 } else {
                     currentCommandIndex = endForIndex; 
                 }
-                break;
+                break; 
             }
             case CommandType::END_FOR: {
                 addLogEntry("WARNING: Encountered END_FOR command without active loop context. Advancing.");
-                break;
+                break; 
             }
             case CommandType::DECLARE:
             case CommandType::ADD:
@@ -443,10 +435,11 @@ const ParsedCommand* Process::getNextCommand() {
             }
         }
         
-        currentCommandIndex++;
+        currentCommandIndex++; 
         return currentParsedCommand;
     }
-    return nullptr;
+
+    return nullptr; 
 }
 
 const ParsedCommand* Process::getCommandAtIndex(int index) const {

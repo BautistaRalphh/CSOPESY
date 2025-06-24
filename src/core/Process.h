@@ -45,6 +45,7 @@ struct LoopContext {
     int startCommandIndex;
     int endCommandIndex;
     std::string loopVarName;
+    uint16_t startValue;
     uint16_t currentLoopValue;
     uint16_t endValue;
     uint16_t stepValue;

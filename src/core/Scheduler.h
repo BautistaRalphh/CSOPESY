@@ -82,7 +82,7 @@ private:
 
     mutable std::mutex mtx;
     mutable std::condition_variable cv;
-    std::thread schedulerThread;
+    std::unique_ptr<std::thread> schedulerThread;
     std::atomic<bool> running;
     SchedulerAlgorithmType currentAlgorithm; 
 
