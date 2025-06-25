@@ -33,10 +33,10 @@ public:
     Scheduler(int coreCount);
     ~Scheduler();
 
-    void addProcess(Process* process);          // Add process to queue
-    void markCoreAvailable(int core);           // Mark core as free
-    void start();                               // Start scheduler
-    void stop();                                // Stop scheduler
+    void addProcess(Process* process);          
+    void markCoreAvailable(int core);           
+    void start();                               
+    void stop();                                
     void resetCoreStates();
     void setAlgorithmType(SchedulerAlgorithmType type);
     SchedulerAlgorithmType getAlgorithmType() const;
@@ -71,7 +71,8 @@ private:
     void _advanceSimulatedTimeUnlocked(long long deltaTime);
     void _checkSleepingProcessesUnlocked();
     bool _sleepQuickScan() const; 
-
+    bool _areAllQueuesEmptyUnlocked() const;
+    
     std::string getCurrentTimestamp(); 
 
     int numCores;

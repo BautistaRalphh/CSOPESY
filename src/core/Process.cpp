@@ -9,6 +9,7 @@
 #include <random>
 #include <functional> 
 #include <set>
+#include <sstream>
 
 Process::Process(const std::string& name, const std::string& p_id, const std::string& c_time)
     : processName(name),

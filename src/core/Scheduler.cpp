@@ -80,21 +80,18 @@ void Scheduler::start() {
 }
 
 void Scheduler::stop() {
-    if (!running.load(std::memory_order_relaxed)) {
-        std::cout << "[INFO] Scheduler not running. Ignoring stop request." << std::endl;
-        return;
-    }
-
     {
         std::lock_guard<std::mutex> lock(mtx);
+        if (!running.load(std::memory_order_relaxed)) return;
+
         running.store(false, std::memory_order_release);
+
+        cv.notify_all();
     }
-    cv.notify_all();
+
     if (schedulerThread && schedulerThread->joinable()) {
         schedulerThread->join();
         schedulerThread.reset();
-    } else {
-        std::cerr << "[WARNING] Scheduler thread was not joinable or not running." << std::endl;
     }
 }
 
@@ -256,6 +253,8 @@ bool Scheduler::_sleepQuickScan() const {
 }
 
 bool Scheduler::executeSingleCommand(Process* proc, int coreId) {
+    if (!running.load(std::memory_order_relaxed)) return false;
+
     const ParsedCommand* cmd = proc->getNextCommand(); 
     bool commandExecuted = false;
 
@@ -388,6 +387,17 @@ bool Scheduler::executeSingleCommand(Process* proc, int coreId) {
     return commandExecuted; 
 }
 
+bool Scheduler::_areAllQueuesEmptyUnlocked() const {
+    if (_getAlgorithmTypeUnlocked() == SchedulerAlgorithmType::rr) {
+        return globalQueue.empty();
+    } else {
+        for (const auto& q : processQueues) {
+            if (!q.empty()) return false;
+        }
+        return true;
+    }
+}
+
 void Scheduler::runSchedulingLoop() {
     auto lastRealTimeTick = std::chrono::high_resolution_clock::now();
 
@@ -420,9 +430,11 @@ void Scheduler::runSchedulingLoop() {
         bool anyCoreRunning = (_getCoresUsedUnlocked() > 0);
 
         if (!hasReadyProcessesInQueue && !anyCoreRunning && !_sleepQuickScan()) {
-            cv.wait_for(lock, std::chrono::milliseconds(REAL_TIME_TICK_DURATION_MS), [&]{
-                return !running.load(std::memory_order_relaxed) || hasReadyProcessesInQueue || _sleepQuickScan();
-            });
+            cv.wait_for(lock, std::chrono::milliseconds(REAL_TIME_TICK_DURATION_MS), [&] {
+    return !running.load(std::memory_order_relaxed)
+        || !_areAllQueuesEmptyUnlocked()
+        || _sleepQuickScan();
+});
         } else {
             cv.wait_for(lock, std::chrono::microseconds(1), [&]{
                 return !running.load(std::memory_order_relaxed) || hasReadyProcessesInQueue || _sleepQuickScan();
