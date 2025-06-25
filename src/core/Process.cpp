@@ -442,13 +442,6 @@ const ParsedCommand* Process::getNextCommand() {
     return nullptr; 
 }
 
-const ParsedCommand* Process::getCommandAtIndex(int index) const {
-    if (index >= 0 && index < commands.size()) {
-        return &commands[index];
-    }
-    return nullptr;
-}
-
 int Process::getCpuCoreExecuting() const {
     return cpuCoreExecuting;
 }

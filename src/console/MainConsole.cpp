@@ -83,7 +83,8 @@ void MainConsole::handleCommand(const std::string& command) {
                 algoType = SchedulerAlgorithmType::fcfs;
             } else if (schedulerTypeStr == "rr") {
                 algoType = SchedulerAlgorithmType::rr;
-            } else {
+            } 
+            else {
                 std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
                 std::cerr << "Supported types: fcfs, rr" << std::endl;
                 std::cout << "Initialization failed." << std::endl;
@@ -416,7 +417,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
             for (const auto* p_ptr : finishedProcesses) { 
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
-                                << "Status: " << "FINISHED" 
+                                << "Status: " << "TERMINATED" 
                                 << " Core: " << (p_ptr->getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p_ptr->getCpuCoreExecuting()))
                                 << " " << p_ptr->getCurrentCommandIndex() << "/" << p_ptr->getTotalInstructionLines() 
                                 << std::endl;

@@ -11,7 +11,7 @@
 #include <ctime>
 #include <random> 
 #include <chrono> 
-#include <set> // Added: Required for std::set in generateRandomCommands (for tracking declared variables)
+#include <set> 
 
 enum class ProcessStatus {
     NEW,
@@ -85,7 +85,7 @@ public:
 
     void addCommand(const std::string& rawCommand);
     void generateDummyPrintCommands(int count, const std::string& baseMessage);
-    void generateRandomCommands(int count); // This function will internally manage its own counter
+    void generateRandomCommands(int count); 
 
     const std::string& getPid() const { return pid; }
     const std::string& getProcessName() const { return processName; }
@@ -97,7 +97,6 @@ public:
     int getCpuCoreExecuting() const; 
     const std::string& getFinishTime() const { return finishTime; }
     const ParsedCommand* getNextCommand();
-    const ParsedCommand* getCommandAtIndex(int index) const;
 
     void setPid(const std::string& p_id) { pid = p_id; }
     void setProcessName(const std::string& name) { processName = name; }
