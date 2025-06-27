@@ -43,27 +43,35 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << "Name: " << currentProcessData->getProcessName() << std::endl;
     std::cout << "PID: " << currentProcessData->getPid() << std::endl;
     std::cout << "Status: ";
-    switch (currentProcessData->getStatus()) { 
+    switch (currentProcessData->getStatus()) {
         case ProcessStatus::NEW: std::cout << "\033[36mNEW"; break;
         case ProcessStatus::READY: std::cout << "READY"; break;
-        case ProcessStatus::RUNNING: std::cout << "\033[35mRUNNING\033[36m"; break; 
-        case ProcessStatus::TERMINATED: std::cout << "\033[TERMINATED\033[36m"; break; 
-        case ProcessStatus::PAUSED: std::cout << "\033[33mPAUSED\033[36m"; break; 
+        case ProcessStatus::RUNNING: std::cout << "\033[35mRUNNING\033[36m"; break;
+        case ProcessStatus::TERMINATED: std::cout << "\033[31mTERMINATED\033[36m"; break;
+        case ProcessStatus::PAUSED: std::cout << "\033[33mPAUSED\033[36m"; break;
     }
-    std::cout << "\033[0m" << std::endl; 
+    std::cout << "\033[0m" << std::endl;
     std::cout << "CPU Core: " << currentProcessData->getCpuCoreExecuting() << std::endl;
     std::cout << "Commands Executed: " << currentProcessData->getCurrentCommandIndex() << std::endl;
     std::cout << "Total Commands: " << currentProcessData->getTotalInstructionLines() << std::endl;
     std::cout << "Creation Time: " << currentProcessData->getCreationTime() << std::endl;
-    std::cout << "Finish Time: " << currentProcessData->getFinishTime() << std::endl; 
+    std::cout << "Finish Time: " << currentProcessData->getFinishTime() << std::endl;
     std::cout << "\033[0m";
     std::cout << std::endl;
 
     const auto& logs = currentProcessData->getLogEntries();
+    const size_t maxLogsToDisplay = 15;
+
     if (!logs.empty()) {
         std::cout << "Logs:\n";
-        for (const std::string& log : logs) {
-            std::cout << "  " << log << std::endl;
+
+        size_t startIndex = logs.size() > maxLogsToDisplay ? logs.size() - maxLogsToDisplay : 0;
+        for (size_t i = startIndex; i < logs.size(); ++i) {
+            std::cout << "  " << logs[i] << std::endl;
+        }
+
+        if (logs.size() > maxLogsToDisplay) {
+            std::cout << "  ... (showing last " << maxLogsToDisplay << " of " << logs.size() << " logs)\n";
         }
     } else {
         std::cout << "Logs: No logs recorded.\n";
