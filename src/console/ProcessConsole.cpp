@@ -60,7 +60,7 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << std::endl;
 
     const auto& logs = currentProcessData->getLogEntries();
-    const size_t maxLogsToDisplay = 15;
+    const size_t maxLogsToDisplay = 100;
 
     if (!logs.empty()) {
         std::cout << "Logs:\n";
