@@ -90,7 +90,11 @@ void Scheduler::stop() {
     }
 
     if (schedulerThread && schedulerThread->joinable()) {
-        schedulerThread->join();
+        if (schedulerThread->get_id() != std::this_thread::get_id()) {
+            schedulerThread->join();
+        } else {
+            std::cerr << "[ERROR] Scheduler thread tried to join itself. Skipping join to avoid deadlock." << std::endl;
+        }
         schedulerThread.reset();
     }
 }

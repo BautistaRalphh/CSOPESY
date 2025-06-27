@@ -230,19 +230,21 @@ void ConsoleManager::createBatchProcess() {
 
 void ConsoleManager::batchGenLoop() {
     while (batchGenRunning.load()) {
-        if (scheduler) { 
-            long long currentSimulatedTime = scheduler->getSimulatedTime(); 
+        if (scheduler) {
+            long long currentSimulatedTime = scheduler->getSimulatedTime();
 
             if (currentSimulatedTime >= nextBatchTickTarget) {
                 createBatchProcess();
                 nextBatchTickTarget += batchProcessFrequency;
 
-                while (currentSimulatedTime >= nextBatchTickTarget) {
+                while (batchGenRunning.load() &&
+                       (currentSimulatedTime = scheduler->getSimulatedTime()) >= nextBatchTickTarget) {
                     createBatchProcess();
                     nextBatchTickTarget += batchProcessFrequency;
                 }
             }
         }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
@@ -267,11 +269,12 @@ void ConsoleManager::startBatchGen() {
 void ConsoleManager::stopBatchGen() {
     if (batchGenRunning.load()) {
         batchGenRunning.store(false);
+
         if (batchGenThread && batchGenThread->joinable()) {
-            batchGenThread->join();
+            batchGenThread->join(); 
             batchGenThread.reset();
             std::cout << "[INFO] Batch process generation thread stopped." << std::endl;
-        }
+        } 
     }
 }
 
@@ -357,12 +360,14 @@ void ConsoleManager::startScheduler() {
 }
 
 void ConsoleManager::stopScheduler() {
+
     if (schedulerStarted.load()) {
         stopBatchGen();
 
         if (scheduler) {
             scheduler->stop();
             schedulerStarted.store(false);
+        } else {
         }
 
         for (auto& pair : processes) {
@@ -372,12 +377,12 @@ void ConsoleManager::stopScheduler() {
                 p.setCpuCoreExecuting(-1);
             }
         }
+
     } else if (!scheduler) {
         std::cerr << "[ERROR] Scheduler is not initialized." << std::endl;
-    } else {
-        std::cout << "Scheduler is not currently running." << std::endl;
     }
 }
+
 
 Scheduler* ConsoleManager::getScheduler() const {
     return scheduler.get();
