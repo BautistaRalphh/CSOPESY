@@ -387,3 +387,11 @@ void ConsoleManager::stopScheduler() {
 Scheduler* ConsoleManager::getScheduler() const {
     return scheduler.get();
 }
+
+std::vector<Process*> ConsoleManager::getProcesses() const {
+    std::vector<Process*> processList;
+    for (const auto& pair : processes) {
+        processList.push_back(const_cast<Process*>(&pair.second));  // Add process pointer to the list
+    }
+    return processList;
+}

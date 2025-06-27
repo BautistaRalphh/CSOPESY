@@ -72,6 +72,7 @@ public:
     const Process* getProcess(const std::string& name) const;
     Process* getProcessMutable(const std::string& name);
     const std::map<std::string, Process>& getAllProcesses() const;
+    std::vector<Process*> getProcesses() const;
 
     std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;

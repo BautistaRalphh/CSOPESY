@@ -265,6 +265,14 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
 
+        std::sort(activeProcesses.begin(), activeProcesses.end(), [](const Process* a, const Process* b) {
+            return a->getCreationTime() < b->getCreationTime();  
+        });
+
+        std::sort(finishedProcesses.begin(), finishedProcesses.end(), [](const Process* a, const Process* b) {
+            return a->getCreationTime() < b->getCreationTime();  
+        });
+
         std::cout << "\n--- Scheduler Status ---" << std::endl;
         if (scheduler && scheduler->isRunning()) {
             int totalCores = scheduler->getTotalCores();
