@@ -5,33 +5,54 @@
 #include <map>
 #include <cstdint>
 #include <sstream>
+#include <algorithm>
+#include <stack>
+#include <cstdlib>
+#include <ctime>
+#include <random> 
+#include <chrono> 
+#include <set> 
 
 enum class ProcessStatus {
     NEW,
-    IDLE,
+    READY,
     RUNNING,
-    FINISHED,
-    PAUSED
+    TERMINATED,
+    PAUSED 
 };
 
 enum class CommandType {
+    UNKNOWN,
     PRINT,
     DECLARE,
     ADD,
     SUBTRACT,
     SLEEP,
-    FOR_LOOP,
-    UNKNOWN
+    FOR,
+    END_FOR
 };
 
-// Structure to hold parsed command data
 struct ParsedCommand {
     CommandType type;
     std::vector<std::string> args;
-    // Future: additional fields for complex commands (e.g., nested instructions for FOR_LOOP)
+    int originalLineIndex;
 
-    ParsedCommand(CommandType t = CommandType::UNKNOWN, std::vector<std::string> a = {})
-        : type(t), args(a) {}
+    ParsedCommand(CommandType t = CommandType::UNKNOWN, std::vector<std::string> a = {}, int originalIdx = -1)
+        : type(t), args(a), originalLineIndex(originalIdx) {}
+};
+
+struct LoopContext {
+    int startCommandIndex;
+    int endCommandIndex;
+    std::string loopVarName;
+    uint16_t startValue;
+    uint16_t currentLoopValue;
+    uint16_t endValue;
+    uint16_t stepValue;
+
+    LoopContext(int startIdx, int endIdx, const std::string& varName, uint16_t currentVal, uint16_t endVal, uint16_t stepVal)
+        : startCommandIndex(startIdx), endCommandIndex(endIdx), loopVarName(varName),
+          currentLoopValue(currentVal), endValue(endVal), stepValue(stepVal) {}
 };
 
 class Process {
@@ -46,14 +67,25 @@ private:
     int cpuCoreExecuting;
     std::string finishTime;
 
+    std::vector<std::string> splitInstructions(const std::string& block);
+    std::string trim(const std::string& str);
+
     std::map<std::string, uint16_t> variables;
     std::vector<std::string> executionLog;
+
+    std::stack<LoopContext> loopStack;
+
+    bool sleeping;
+    long long wakeUpTime;
+
+    int EndFor(int forCommandIndex) const;
 
 public:
     Process(const std::string& name = "", const std::string& p_id = "", const std::string& c_time = "");
 
     void addCommand(const std::string& rawCommand);
     void generateDummyPrintCommands(int count, const std::string& baseMessage);
+    void generateRandomCommands(int count); 
 
     const std::string& getPid() const { return pid; }
     const std::string& getProcessName() const { return processName; }
@@ -64,8 +96,7 @@ public:
     ProcessStatus getStatus() const { return status; }
     int getCpuCoreExecuting() const; 
     const std::string& getFinishTime() const { return finishTime; }
-    const ParsedCommand* getNextCommand() const;
-    const ParsedCommand* getCommandAtIndex(int index) const;
+    const ParsedCommand* getNextCommand();
 
     void setPid(const std::string& p_id) { pid = p_id; }
     void setProcessName(const std::string& name) { processName = name; }
@@ -85,6 +116,9 @@ public:
 
     bool doesVariableExist(const std::string& varName) const;
 
-    /* will be removed after h6 */
-    void writeToTextFile() const;
+    bool isSleeping() const;
+    void setSleeping(bool value);
+    void setWakeUpTime(long long time);
+    long long getWakeUpTime() const;
+    bool isLoopStackEmpty() const { return loopStack.empty(); } 
 };

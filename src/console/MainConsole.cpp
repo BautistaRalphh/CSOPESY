@@ -2,6 +2,7 @@
 #include "ConsoleManager.h"
 #include "Process.h"      
 #include "core/Scheduler.h"
+#include "core/Process.h"
 
 #include <regex>
 #include <iomanip>
@@ -10,6 +11,9 @@
 #include <chrono>
 #include <thread>
 #include <vector> 
+#include <fstream>
+#include <ctime>
+#include <sstream>
 
 MainConsole::MainConsole() : AConsole("MainConsole"), headerDisplayed(false), initialized(false) {}
 
@@ -24,6 +28,17 @@ void MainConsole::display() {
     }
     std::cout << std::endl;
     std::cout << "\033[0m" << "Enter command: ";
+}
+
+void MainConsole::displayHeader() {
+    std::cout << "  _____  _____  ____  _____  ______  _______    __" << std::endl;
+    std::cout << " / ____|/ ____|/ __ \\|  __ \\|  ____|/ ____\\ \\  / /" << std::endl;
+    std::cout << "| |    | (___ | |  | | |__) | |__  | (___  \\ \\/ / " << std::endl;
+    std::cout << "| |     \\___ \\| |  | | ___/ |  __|  \\___ \\  \\  /  " << std::endl;
+    std::cout << "| |____ ____) | |__| | |    | |____ ____) |  | |   " << std::endl;
+    std::cout << " \\_____|_____/ \\____/|_|    |______|_____/   |_|   " << std::endl;
+    std::cout << "\033[32mHello, welcome to CSOPESY command line\033[0m" << std::endl;
+    std::cout << "\033[33mType 'exit' to quit, 'clear' to clear the screen\033[0m" << std::endl;
 }
 
 void MainConsole::handleCommand(const std::string& command) {
@@ -64,12 +79,14 @@ void MainConsole::handleCommand(const std::string& command) {
             std::string schedulerTypeStr = config["scheduler"];
             SchedulerAlgorithmType algoType = SchedulerAlgorithmType::NONE;
 
-            if (schedulerTypeStr == "FCFS") {
-                algoType = SchedulerAlgorithmType::FCFS;
-            }
+            if (schedulerTypeStr == "fcfs") {
+                algoType = SchedulerAlgorithmType::fcfs;
+            } else if (schedulerTypeStr == "rr") {
+                algoType = SchedulerAlgorithmType::rr;
+            } 
             else {
                 std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
-                std::cerr << "Supported types: FCFS" << std::endl;
+                std::cerr << "Supported types: fcfs, rr" << std::endl;
                 std::cout << "Initialization failed." << std::endl;
                 return;
             }
@@ -100,7 +117,104 @@ void MainConsole::handleCommand(const std::string& command) {
                 std::cout << "Info: 'batch-process-freq' not found in config.txt. Auto-generation disabled." << std::endl;
             }
 
-            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType, batchProcessFreq);
+            uint32_t minIns = 0;
+            auto it_min_ins = config.find("min-ins");
+            if (it_min_ins != config.end()) {
+                try {
+                    minIns = static_cast<uint32_t>(std::stoul(it_min_ins->second));
+                    if (minIns < 1) {
+                        std::cerr << "Error: 'min-ins' must be at least 1 in config.txt. Found: " << it_min_ins->second << std::endl;
+                        std::cout << "Initialization failed." << std::endl;
+                        return;
+                    }
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Error: Invalid 'min-ins' value in config.txt. Must be an integer." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Error: 'min-ins' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                }
+            } else {
+                std::cerr << "Error: 'min-ins' not found in config.txt. Initialization failed." << std::endl;
+                return;
+            }
+
+            uint32_t maxIns = 0;
+            auto it_max_ins = config.find("max-ins");
+            if (it_max_ins != config.end()) {
+                try {
+                    maxIns = static_cast<uint32_t>(std::stoul(it_max_ins->second));
+                    if (maxIns < 1) {
+                        std::cerr << "Error: 'max-ins' must be at least 1 in config.txt. Found: " << it_max_ins->second << std::endl;
+                        std::cout << "Initialization failed." << std::endl;
+                        return;
+                    }
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Error: Invalid 'max-ins' value in config.txt. Must be an integer." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Error: 'max-ins' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                }
+            } else {
+                std::cerr << "Error: 'max-ins' not found in config.txt. Initialization failed." << std::endl;
+                return;
+            }
+
+            if (minIns > maxIns) {
+                std::cerr << "Error: 'min-ins' (" << minIns << ") cannot be greater than 'max-ins' (" << maxIns << ") in config.txt." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            uint32_t delaysPerExec = 0;
+            auto it_delays_per_exec = config.find("delays-per-exec");
+            if (it_delays_per_exec != config.end()) {
+                try {
+                    delaysPerExec = static_cast<uint32_t>(std::stoul(it_delays_per_exec->second));
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Error: Invalid 'delays-per-exec' value in config.txt. Must be an integer." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Error: 'delays-per-exec' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                }
+            } else {
+                std::cerr << "Error: 'delays-per-exec' not found in config.txt. Initialization failed." << std::endl;
+                return;
+            }
+            
+            uint32_t quantumCycles = 0;
+            auto it_quantum_cycles = config.find("quantum-cycles");
+            if (it_quantum_cycles != config.end()) {
+                try {
+                    quantumCycles = static_cast<uint32_t>(std::stoul(it_quantum_cycles->second));
+                    if (quantumCycles <= 0) {
+                        std::cerr << "Error: 'quantum-cycles' must be a positive integer in config.txt. Found: " << it_quantum_cycles->second << std::endl;
+                        std::cout << "Initialization failed." << std::endl;
+                        return;
+                    }
+                } catch (const std::invalid_argument& e) {
+                    std::cerr << "Error: Invalid 'quantum-cycles' value in config.txt. Must be an integer." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                } catch (const std::out_of_range& e) {
+                    std::cerr << "Error: 'quantum-cycles' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
+                    std::cout << "Initialization failed." << std::endl;
+                    return;
+                }
+            } else {
+                std::cerr << "Error: 'quantum-cycles' not found in config.txt. Initialization failed." << std::endl;
+                return;
+            }
+            
+            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType, batchProcessFreq, minIns, maxIns, delaysPerExec, quantumCycles);
             initialized = true;
         } else {
             std::cout << "Please type 'initialize' first before using other commands." << std::endl;
@@ -108,17 +222,6 @@ void MainConsole::handleCommand(const std::string& command) {
     } else {
         handleMainCommands(command);
     }
-}
-
-void MainConsole::displayHeader() {
-    std::cout << "  _____  _____  ____  _____  ______  _______    __" << std::endl;
-    std::cout << " / ____|/ ____|/ __ \\|  __ \\|  ____|/ ____\\ \\  / /" << std::endl;
-    std::cout << "| |    | (___ | |  | | |__) | |__  | (___  \\ \\/ / " << std::endl;
-    std::cout << "| |     \\___ \\| |  | | ___/ |  __|  \\___ \\  \\  /  " << std::endl;
-    std::cout << "| |____ ____) | |__| | |    | |____ ____) |  | |   " << std::endl;
-    std::cout << " \\_____|_____/ \\____/|_|    |______|_____/   |_|   " << std::endl;
-    std::cout << "\033[32mHello, welcome to CSOPESY command line\033[0m" << std::endl;
-    std::cout << "\033[33mType 'exit' to quit, 'clear' to clear the screen\033[0m" << std::endl;
 }
 
 void MainConsole::handleMainCommands(const std::string& command) {
@@ -135,43 +238,47 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (option == "-r") {
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
         } else if (option == "-s") {
-            std::filesystem::path logDirPath = "process_logs";
-            if (!std::filesystem::exists(logDirPath)) {
-                try {
-                    std::filesystem::create_directory(logDirPath);
-                } catch (const std::filesystem::filesystem_error& e) {
-                    std::cerr << "Error creating directory 'process_logs': " << e.what() << std::endl;
-                }
-            }
-
             bool created = ConsoleManager::getInstance()->createProcessConsole(processName);
             if (created) {
                 ConsoleManager::getInstance()->switchToProcessConsole(processName);
             }
         }
     } else if (std::regex_match(command, match, screen_ls_regex)) {
+        std::ostringstream oss;
+        std::streambuf* oldCout = std::cout.rdbuf();
+        std::cout.rdbuf(oss.rdbuf());
+
         auto consoleManager = ConsoleManager::getInstance();
         Scheduler* scheduler = consoleManager->getScheduler();
-        auto allProcesses = ConsoleManager::getInstance()->getAllProcesses();
+        
+        const auto& allProcesses = ConsoleManager::getInstance()->getAllProcesses();
 
-        std::vector<Process> activeProcesses;
-        std::vector<Process> finishedProcesses;
+        std::vector<const Process*> activeProcesses;
+        std::vector<const Process*> finishedProcesses;
 
         for (const auto& pair : allProcesses) {
-            const Process& p = pair.second;
-            if (p.getStatus() == ProcessStatus::FINISHED) {
-                finishedProcesses.push_back(p);
+            const Process& p = pair.second; 
+            if (p.getStatus() == ProcessStatus::TERMINATED) {
+                finishedProcesses.push_back(&p); 
             } else {
-                activeProcesses.push_back(p);
+                activeProcesses.push_back(&p); 
             }
         }
-        
+
+        std::sort(activeProcesses.begin(), activeProcesses.end(), [](const Process* a, const Process* b) {
+            return a->getCreationTime() < b->getCreationTime();  
+        });
+
+        std::sort(finishedProcesses.begin(), finishedProcesses.end(), [](const Process* a, const Process* b) {
+            return a->getCreationTime() < b->getCreationTime();  
+        });
+
         std::cout << "\n--- Scheduler Status ---" << std::endl;
         if (scheduler && scheduler->isRunning()) {
+            int totalCores = scheduler->getTotalCores();
+            int coresUsed = scheduler->getCoresUsed();
+            int coresAvailable = scheduler->getCoresAvailable();
             double cpuUtilization = scheduler->getCpuUtilization();
-            int coresUsed = scheduler->getCoresUsed();            
-            int coresAvailable = scheduler->getCoresAvailable();  
-            int totalCores = scheduler->getTotalCores();           
 
             std::cout << " Total Cores: " << totalCores << std::endl;
             std::cout << " Cores Used: " << coresUsed << std::endl;
@@ -185,21 +292,22 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (activeProcesses.empty()) {
             std::cout << " No active processes found." << std::endl;
         } else {
-            for (const auto& p : activeProcesses) {
+            for (const auto* p_ptr : activeProcesses) { 
                 std::string statusStr;
-                switch (p.getStatus()) {
+                switch (p_ptr->getStatus()) { 
                     case ProcessStatus::NEW: statusStr = "NEW"; break;
-                    case ProcessStatus::IDLE: statusStr = "IDLE"; break;
+                    case ProcessStatus::READY: statusStr = "READY"; break;
                     case ProcessStatus::RUNNING: statusStr = "RUNNING"; break;
-                    case ProcessStatus::PAUSED: statusStr = "PAUSED"; break;
-                    case ProcessStatus::FINISHED: statusStr = "FINISHED"; break; 
+                    case ProcessStatus::PAUSED: statusStr = "PAUSED"; break; 
+                    case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break; 
+                    default: statusStr = "UNKNOWN"; break;
                 }
-                std::cout << " " << p.getProcessName() 
-                          << " (" << p.getCreationTime() << ") "
-                          << "Status: " << statusStr
-                          << " Core: " << (p.getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p.getCpuCoreExecuting()))
-                          << " " << p.getCurrentCommandIndex() << "/" << p.getTotalInstructionLines() 
-                          << std::endl;
+                std::cout << " " << p_ptr->getProcessName() 
+                                << " (" << p_ptr->getCreationTime() << ") "
+                                << "Status: " << statusStr
+                                << " Core: " << (p_ptr->getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p_ptr->getCpuCoreExecuting()))
+                                << " " << p_ptr->getCurrentCommandIndex() << "/" << p_ptr->getTotalInstructionLines() 
+                                << std::endl;
             }
         }
 
@@ -207,26 +315,128 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (finishedProcesses.empty()) {
             std::cout << " No finished processes found." << std::endl;
         } else {
-            for (const auto& p : finishedProcesses) {
-                std::cout << " " << p.getProcessName() 
-                          << " (" << p.getCreationTime() << ") "
-                          << "Status: " << "FINISHED" // Status is already FINISHED for these
-                          << " Core: " << (p.getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p.getCpuCoreExecuting()))
-                          << " " << p.getCurrentCommandIndex() << "/" << p.getTotalInstructionLines() 
-                          << std::endl;
+            for (const auto* p_ptr : finishedProcesses) { 
+                std::cout << " " << p_ptr->getProcessName() 
+                                << " (" << p_ptr->getCreationTime() << ") "
+                                << "Status: " << "TERMINATED" 
+                                << " Core: " << (p_ptr->getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p_ptr->getCpuCoreExecuting()))
+                                << " " << p_ptr->getCurrentCommandIndex() << "/" << p_ptr->getTotalInstructionLines() 
+                                << std::endl;
             }
         }
-        std::cout << std::flush; 
-    } else if (command == "scheduler-test") {
-        std::cout << "'scheduler-test' command recognized. Doing something." << std::endl;
+        std::cout.rdbuf(oldCout);
+        std::cout << oss.str();
     } else if (command == "scheduler-start") {
         ConsoleManager::getInstance()->startScheduler();
         std::cout << "Scheduler started." << std::endl;
-    }else if (command == "scheduler-stop") {
+    } else if (command == "scheduler-stop") {
         ConsoleManager::getInstance()->stopScheduler();
         std::cout << "Scheduler stopped." << std::endl;
     } else if (command == "report-util") {
-        std::cout << "'report-util' command recognized. Doing something." << std::endl;
+        std::filesystem::path reportsDirPath = "reports";
+        if (!std::filesystem::exists(reportsDirPath)) {
+            try {
+                std::filesystem::create_directory(reportsDirPath);
+                std::cout << "Created directory: " << reportsDirPath << std::endl;
+            } catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "Error creating directory 'reports': " << e.what() << std::endl;
+                std::cout << "Failed to generate report." << std::endl;
+                return;
+            }
+        }
+
+        auto now = std::chrono::system_clock::now();
+        std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+        std::tm* localTime = std::localtime(&currentTime);
+
+        std::ostringstream filenameStream;
+        filenameStream << "reports/scheduler_report_";
+        filenameStream << std::put_time(localTime, "%Y-%m-%d_%H-%M-%S") << ".txt";
+        std::string filename = filenameStream.str();
+
+        std::ofstream reportFile(filename);
+        if (!reportFile.is_open()) {
+            std::cerr << "Error: Could not create report file: " << filename << std::endl;
+            return;
+        }
+
+        std::ostringstream capturedOutput;
+        std::streambuf* oldCoutBuffer = std::cout.rdbuf();
+        std::cout.rdbuf(capturedOutput.rdbuf());
+
+        auto consoleManager = ConsoleManager::getInstance();
+        Scheduler* scheduler = consoleManager->getScheduler();
+        const auto& allProcesses = ConsoleManager::getInstance()->getAllProcesses();
+
+        std::vector<const Process*> activeProcesses;
+        std::vector<const Process*> finishedProcesses;
+
+        for (const auto& pair : allProcesses) {
+            const Process& p = pair.second; 
+            if (p.getStatus() == ProcessStatus::TERMINATED) {
+                finishedProcesses.push_back(&p); 
+            } else {
+                activeProcesses.push_back(&p); 
+            }
+        }
+
+        std::cout << "\n--- Scheduler Status ---" << std::endl;
+        if (scheduler && scheduler->isRunning()) {
+            int totalCores = scheduler->getTotalCores();
+            int coresUsed = scheduler->getCoresUsed();
+            int coresAvailable = scheduler->getCoresAvailable();
+            double cpuUtilization = scheduler->getCpuUtilization();
+
+            std::cout << " Total Cores: " << totalCores << std::endl;
+            std::cout << " Cores Used: " << coresUsed << std::endl;
+            std::cout << " Cores Available: " << coresAvailable << std::endl;
+            std::cout << " CPU Utilization: " << std::fixed << std::setprecision(2) << cpuUtilization << "%" << std::endl;
+        } else {
+            std::cout << " Scheduler is not running. Use 'scheduler-start' to activate." << std::endl;
+        }
+
+        std::cout << "\n--- Active Processes ---" << std::endl;
+        if (activeProcesses.empty()) {
+            std::cout << " No active processes found." << std::endl;
+        } else {
+            for (const auto* p_ptr : activeProcesses) { 
+                std::string statusStr;
+                switch (p_ptr->getStatus()) { 
+                    case ProcessStatus::NEW: statusStr = "NEW"; break;
+                    case ProcessStatus::READY: statusStr = "READY"; break;
+                    case ProcessStatus::RUNNING: statusStr = "RUNNING"; break;
+                    case ProcessStatus::PAUSED: statusStr = "PAUSED"; break; 
+                    case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break; 
+                    default: statusStr = "UNKNOWN"; break;
+                }
+                std::cout << " " << p_ptr->getProcessName() 
+                                << " (" << p_ptr->getCreationTime() << ") "
+                                << "Status: " << statusStr
+                                << " Core: " << (p_ptr->getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p_ptr->getCpuCoreExecuting()))
+                                << " " << p_ptr->getCurrentCommandIndex() << "/" << p_ptr->getTotalInstructionLines() 
+                                << std::endl;
+            }
+        }
+
+        std::cout << "\n--- Finished Processes ---" << std::endl;
+        if (finishedProcesses.empty()) {
+            std::cout << " No finished processes found." << std::endl;
+        } else {
+            for (const auto* p_ptr : finishedProcesses) { 
+                std::cout << " " << p_ptr->getProcessName() 
+                                << " (" << p_ptr->getCreationTime() << ") "
+                                << "Status: " << "TERMINATED" 
+                                << " Core: " << (p_ptr->getCpuCoreExecuting() == -1 ? "N/A" : std::to_string(p_ptr->getCpuCoreExecuting()))
+                                << " " << p_ptr->getCurrentCommandIndex() << "/" << p_ptr->getTotalInstructionLines() 
+                                << std::endl;
+            }
+        }
+
+        std::cout.rdbuf(oldCoutBuffer);
+        
+        reportFile << capturedOutput.str();
+        reportFile.close();
+        std::cout << "Scheduler report saved to " << filename << std::endl;
     } else if (command == "clear") {
         onEnabled(); 
     } else {

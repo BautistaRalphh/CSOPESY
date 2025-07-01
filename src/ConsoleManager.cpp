@@ -15,6 +15,7 @@
 #include <map>
 #include <fstream>
 #include <mutex>
+#include <random>
 
 ConsoleManager* ConsoleManager::instance = nullptr;
 static std::atomic<int> autoProcessCounter(0); 
@@ -33,13 +34,17 @@ ConsoleManager::ConsoleManager()
       exitApp(false),
       processes(),
       processConsoleScreens(),
-      scheduler(nullptr),
+      scheduler(nullptr), 
       schedulerStarted(false),
       batchProcessFrequency(0),
-      batchGenThread(nullptr),
+      batchGenThread(nullptr), 
       batchGenRunning(false),
       nextBatchTickTarget(0),
-      cpuCyclesPtr(nullptr),
+      // cpuCyclesPtr(nullptr),
+      minInstructionsPerProcess(0),
+      maxInstructionsPerProcess(0),
+      processDelayPerExecution(0),
+      quantumCycles(0),
       mainConsole(std::make_unique<MainConsole>())
 {
     setActiveConsole(mainConsole.get());
@@ -114,8 +119,8 @@ Process* ConsoleManager::getProcessMutable(const std::string& name) {
     return nullptr;
 }
 
-std::map<std::string, Process> ConsoleManager::getAllProcesses() const {
-    return processes;
+const std::map<std::string, Process>& ConsoleManager::getAllProcesses() const {
+    return processes; 
 }
 
 bool ConsoleManager::createProcessConsole(const std::string& name) {
@@ -129,14 +134,24 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     newProcess.setCpuCoreExecuting(-1);
     newProcess.setFinishTime("N/A");
 
-    newProcess.generateDummyPrintCommands(100, "Hello world from " + name);
+    if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
+        std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
+        newProcess.generateRandomCommands(100); 
+    } else {
+        static std::random_device rd;
+        static std::mt19937 gen(rd()); 
+        std::uniform_int_distribution<uint32_t> distrib(minInstructionsPerProcess, maxInstructionsPerProcess);
+        uint32_t numInstructions = distrib(gen);
+        newProcess.generateRandomCommands(numInstructions);
+        //std::cout << "Process '" << name << "' created with " << numInstructions << " instructions." << std::endl;
+    }
 
-    processes[name] = newProcess;
+    processes[name] = std::move(newProcess);
 
-    Process* processInMap = &(processes.at(name));
+    Process* processInMap = &(processes.at(name)); 
 
     if (scheduler) {
-        scheduler->addProcess(processInMap);
+        scheduler->addProcess(processInMap); 
     } else {
         std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
     }
@@ -160,7 +175,7 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
     auto it = processConsoleScreens.find(name);
     if (it != processConsoleScreens.end()) {
         ProcessConsole* pc = it->second.get();
-        pc->updateProcessData(processData);
+        pc->updateProcessData(processData); 
         setActiveConsole(pc);
     } else {
         std::cout << "Process data for '" << name << "' found, but console screen not managed. Creating new screen." << std::endl;
@@ -206,10 +221,6 @@ bool ConsoleManager::readConfigFile(const std::string& filename, std::map<std::s
     return true;
 }
 
-void ConsoleManager::setCpuCyclesCounter(std::atomic<long long>* counterPtr) {
-    cpuCyclesPtr = counterPtr;
-}
-
 void ConsoleManager::createBatchProcess() {
     static std::mutex createBatchProcessMtx;
     std::lock_guard<std::mutex> lock(createBatchProcessMtx);
@@ -219,19 +230,21 @@ void ConsoleManager::createBatchProcess() {
 
 void ConsoleManager::batchGenLoop() {
     while (batchGenRunning.load()) {
-        if (cpuCyclesPtr) {
-            long long currentCpuCycles = cpuCyclesPtr->load();
+        if (scheduler) {
+            long long currentSimulatedTime = scheduler->getSimulatedTime();
 
-            if (currentCpuCycles >= nextBatchTickTarget) {
+            if (currentSimulatedTime >= nextBatchTickTarget) {
                 createBatchProcess();
                 nextBatchTickTarget += batchProcessFrequency;
 
-                while (currentCpuCycles >= nextBatchTickTarget) {
+                while (batchGenRunning.load() &&
+                       (currentSimulatedTime = scheduler->getSimulatedTime()) >= nextBatchTickTarget) {
                     createBatchProcess();
                     nextBatchTickTarget += batchProcessFrequency;
                 }
             }
         }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
@@ -241,13 +254,13 @@ void ConsoleManager::startBatchGen() {
         std::cout << "[INFO] Batch process generation thread already running." << std::endl;
         return;
     }
-    if (!cpuCyclesPtr || batchProcessFrequency <= 0) {
-        std::cerr << "[ERROR] Cannot start batch process generation: CPU Cycles counter not set or frequency not valid." << std::endl;
+    if (!scheduler || scheduler->getAlgorithmType() == SchedulerAlgorithmType::NONE || batchProcessFrequency <= 0) {
+        std::cerr << "[ERROR] Cannot start batch process generation: Scheduler not initialized or frequency not valid." << std::endl;
         return;
     }
 
     batchGenRunning.store(true);
-    nextBatchTickTarget = cpuCyclesPtr->load() + batchProcessFrequency;
+    nextBatchTickTarget = scheduler->getSimulatedTime() + batchProcessFrequency;
 
     batchGenThread = std::make_unique<std::thread>(&ConsoleManager::batchGenLoop, this);
     std::cout << "[INFO] Batch process generation thread started." << std::endl;
@@ -256,15 +269,16 @@ void ConsoleManager::startBatchGen() {
 void ConsoleManager::stopBatchGen() {
     if (batchGenRunning.load()) {
         batchGenRunning.store(false);
+
         if (batchGenThread && batchGenThread->joinable()) {
-            batchGenThread->join();
+            batchGenThread->join(); 
             batchGenThread.reset();
             std::cout << "[INFO] Batch process generation thread stopped." << std::endl;
-        }
+        } 
     }
 }
 
-void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq) {
+void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec, uint32_t quantumCyc) {
     if (schedulerStarted.load()) {
         std::cout << "Scheduler is already running. Please stop it before re-initializing." << std::endl;
         return;
@@ -281,18 +295,29 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     scheduler = std::make_unique<Scheduler>(numCpus);
     scheduler->setAlgorithmType(type);
 
+    scheduler->setDelaysPerExecution(delaysPerExec);
+    scheduler->setQuantumCycles(quantumCyc);
+
+    this->minInstructionsPerProcess = minIns;
+    this->maxInstructionsPerProcess = maxIns;
+    this->processDelayPerExecution = delaysPerExec;
+    this->quantumCycles = quantumCyc;
+
     batchProcessFrequency = batchFreq;
 
-    if (cpuCyclesPtr) { 
-        nextBatchTickTarget = cpuCyclesPtr->load() + batchProcessFrequency;
+    if (scheduler) {
+        nextBatchTickTarget = scheduler->getSimulatedTime() + batchProcessFrequency;
     } else {
-        nextBatchTickTarget = batchProcessFrequency;
+        nextBatchTickTarget = batchProcessFrequency; 
     }
 
     std::cout << "System initialized with " << numCpus << " CPUs and scheduler type: ";
     switch(type) {
-        case SchedulerAlgorithmType::FCFS:
+        case SchedulerAlgorithmType::fcfs:
             std::cout << "FCFS";
+            break;
+        case SchedulerAlgorithmType::rr:
+            std::cout << "Round Robin";
             break;
         case SchedulerAlgorithmType::NONE:
             std::cout << "NONE (algorithm not set)";
@@ -301,10 +326,18 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     std::cout << "." << std::endl;
 
     if (batchProcessFrequency > 0) {
-        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " CPU Cycles." << std::endl;
+        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " Scheduler Cycles." << std::endl;
     } else {
         std::cout << "Batch process generation is disabled." << std::endl;
     }
+
+    std::cout << "Process instruction range: [" << minIns << ", " << maxIns << "] instructions/process." << std::endl;
+    if (delaysPerExec == 0) {
+        std::cout << "Delay per instruction execution set to 0 CPU cycle. Will default to 1 CPU cycle." << std::endl;
+    } else {
+        std::cout << "Delay per instruction execution: " << delaysPerExec << " CPU cycles." << std::endl;
+    }
+    std::cout << "Quantum cycles for Round Robin: " << quantumCycles << " CPU cycles." << std::endl;
 }
 
 void ConsoleManager::startScheduler() {
@@ -327,12 +360,14 @@ void ConsoleManager::startScheduler() {
 }
 
 void ConsoleManager::stopScheduler() {
+
     if (schedulerStarted.load()) {
         stopBatchGen();
 
         if (scheduler) {
             scheduler->stop();
             schedulerStarted.store(false);
+        } else {
         }
 
         for (auto& pair : processes) {
@@ -342,14 +377,21 @@ void ConsoleManager::stopScheduler() {
                 p.setCpuCoreExecuting(-1);
             }
         }
-        std::cout << "Scheduler stopped." << std::endl;
+
     } else if (!scheduler) {
         std::cerr << "[ERROR] Scheduler is not initialized." << std::endl;
-    } else {
-        std::cout << "Scheduler is not currently running." << std::endl;
     }
 }
 
+
 Scheduler* ConsoleManager::getScheduler() const {
     return scheduler.get();
+}
+
+std::vector<Process*> ConsoleManager::getProcesses() const {
+    std::vector<Process*> processList;
+    for (const auto& pair : processes) {
+        processList.push_back(const_cast<Process*>(&pair.second));  // Add process pointer to the list
+    }
+    return processList;
 }
