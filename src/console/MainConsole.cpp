@@ -274,7 +274,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         });
 
         std::cout << "\n--- Scheduler Status ---" << std::endl;
-        if (scheduler && scheduler->isRunning()) {
+        if (scheduler) {
             int totalCores = scheduler->getTotalCores();
             int coresUsed = scheduler->getCoresUsed();
             int coresAvailable = scheduler->getCoresAvailable();
@@ -330,7 +330,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         ConsoleManager::getInstance()->startScheduler();
         std::cout << "Scheduler started." << std::endl;
     } else if (command == "scheduler-stop") {
-        ConsoleManager::getInstance()->stopScheduler();
+        ConsoleManager::getInstance()->stopBatchGen();
         std::cout << "Scheduler stopped." << std::endl;
     } else if (command == "report-util") {
         std::filesystem::path reportsDirPath = "reports";

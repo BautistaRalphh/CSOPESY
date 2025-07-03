@@ -8,7 +8,7 @@
 #include <thread>
 #include <memory>
 
-constexpr long long REAL_TIME_TICK_DURATION_MS = 50;
+constexpr long long REAL_TIME_TICK_DURATION_MS = 100;
 
 Scheduler::Scheduler(int coreCount)
     : numCores(coreCount),
@@ -97,6 +97,7 @@ void Scheduler::stop() {
         }
         schedulerThread.reset();
     }
+    resetCoreStates();
 }
 
 void Scheduler::resetCoreStates() {
@@ -403,6 +404,7 @@ bool Scheduler::_areAllQueuesEmptyUnlocked() const {
 }
 
 void Scheduler::runSchedulingLoop() {
+    std::cout << "[Scheduler] Scheduling loop started.\n";
     auto lastRealTimeTick = std::chrono::high_resolution_clock::now();
 
     while (running.load(std::memory_order_acquire)) {
@@ -410,40 +412,35 @@ void Scheduler::runSchedulingLoop() {
 
         auto now = std::chrono::high_resolution_clock::now();
         long long actualDeltaTimeMillis = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRealTimeTick).count();
-        lastRealTimeTick = now;
 
-        long long simulatedTicksToAdvance = actualDeltaTimeMillis / REAL_TIME_TICK_DURATION_MS;
-        if (simulatedTicksToAdvance > 0) {
-            _advanceSimulatedTimeUnlocked(simulatedTicksToAdvance);
+        if (actualDeltaTimeMillis >= REAL_TIME_TICK_DURATION_MS) {
+            lastRealTimeTick = now;
+            _advanceSimulatedTimeUnlocked(actualDeltaTimeMillis / REAL_TIME_TICK_DURATION_MS);
+            _checkSleepingProcessesUnlocked();
         }
-        
-        _checkSleepingProcessesUnlocked();
 
-        bool hasReadyProcessesInQueue = false;
-        if (_getAlgorithmTypeUnlocked() == SchedulerAlgorithmType::rr) {
-            hasReadyProcessesInQueue = !globalQueue.empty();
-        } else { 
-            for (int i = 0; i < numCores; ++i) {
-                if (!processQueues[i].empty()) {
-                    hasReadyProcessesInQueue = true;
-                    break;
-                }
-            }
-        }
-        
+        bool hasReadyProcessesInQueue = (_getAlgorithmTypeUnlocked() == SchedulerAlgorithmType::rr)
+            ? !globalQueue.empty()
+            : std::any_of(processQueues.begin(), processQueues.end(), [](const auto& q) { return !q.empty(); });
+
         bool anyCoreRunning = (_getCoresUsedUnlocked() > 0);
+        bool hasSleepers = _sleepQuickScan();
 
-        if (!hasReadyProcessesInQueue && !anyCoreRunning && !_sleepQuickScan()) {
+        if (!hasReadyProcessesInQueue && !anyCoreRunning && !hasSleepers) {
+
             cv.wait_for(lock, std::chrono::milliseconds(REAL_TIME_TICK_DURATION_MS), [&] {
-    return !running.load(std::memory_order_relaxed)
-        || !_areAllQueuesEmptyUnlocked()
-        || _sleepQuickScan();
-});
+                return !running.load(std::memory_order_relaxed)
+                    || !_areAllQueuesEmptyUnlocked()
+                    || _sleepQuickScan();
+            });
         } else {
-            cv.wait_for(lock, std::chrono::microseconds(1), [&]{
-                return !running.load(std::memory_order_relaxed) || hasReadyProcessesInQueue || _sleepQuickScan();
+
+            cv.wait_for(lock, std::chrono::microseconds(100), [&] {
+                return !running.load(std::memory_order_relaxed);
             });
         }
+
+        if (!running.load(std::memory_order_relaxed)) break;
 
         switch (_getAlgorithmTypeUnlocked()) {
             case SchedulerAlgorithmType::fcfs:
@@ -453,10 +450,14 @@ void Scheduler::runSchedulingLoop() {
                 _runRoundRobinLogic(lock);
                 break;
             case SchedulerAlgorithmType::NONE:
-                std::cerr << "[WARNING] Scheduler loop running with no algorithm selected." << std::endl;
+                std::cerr << "[WARNING] Scheduler running with no algorithm selected.\n";
                 break;
         }
+
+        lock.unlock();
     }
+
+    std::cout << "[Scheduler] Exiting scheduling loop.\n";
 }
 
 void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
