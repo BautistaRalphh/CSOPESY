@@ -2,20 +2,21 @@
 
 #include "AConsole.h"
 #include "Process.h"       
+#include <memory>
 
 class Process;
 
 class ProcessConsole : public AConsole {
 private:
-    Process* currentProcessData;
+    std::shared_ptr<Process> currentProcessData;
 
     void displayProcessInfo();
 
 public:
-    ProcessConsole(Process* processData); 
+    ProcessConsole(std::shared_ptr<Process> processData);
     void onEnabled() override; 
     void display() override;  
     void handleCommand(const std::string& command) override; 
 
-    void updateProcessData(Process* newData); 
+    void updateProcessData(std::shared_ptr<Process> newData);
 };

@@ -66,7 +66,8 @@ private:
     ProcessStatus status;
     int cpuCoreExecuting;
     std::string finishTime;
-
+    uint32_t memoryRequired = 0;
+    uint32_t pagesAllocated = 0;
     std::vector<std::string> splitInstructions(const std::string& block);
     std::string trim(const std::string& str);
 
@@ -121,4 +122,8 @@ public:
     void setWakeUpTime(long long time);
     long long getWakeUpTime() const;
     bool isLoopStackEmpty() const { return loopStack.empty(); } 
+
+    void setMemory(uint32_t mem, uint32_t pages);
+    uint32_t getMemoryRequired() const;
+    uint32_t getPagesAllocated() const;
 };

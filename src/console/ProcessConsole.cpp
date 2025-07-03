@@ -6,7 +6,7 @@
 #include <iomanip>          
 #include <cstdlib>
 
-ProcessConsole::ProcessConsole(Process* processData) 
+ProcessConsole::ProcessConsole(std::shared_ptr<Process> processData) 
     : AConsole(processData->getProcessName()), currentProcessData(processData) {}
 
 void ProcessConsole::onEnabled() {
@@ -22,7 +22,7 @@ void ProcessConsole::display() {
 
 void ProcessConsole::handleCommand(const std::string& command) {
     if (command == "process-smi") {
-        Process* latestData = ConsoleManager::getInstance()->getProcessMutable(currentProcessData->getProcessName());
+        std::shared_ptr<Process> latestData = ConsoleManager::getInstance()->getProcessMutable(currentProcessData->getProcessName());
         if (latestData) {
             updateProcessData(latestData); 
         }
@@ -56,6 +56,8 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << "Total Commands: " << currentProcessData->getTotalInstructionLines() << std::endl;
     std::cout << "Creation Time: " << currentProcessData->getCreationTime() << std::endl;
     std::cout << "Finish Time: " << currentProcessData->getFinishTime() << std::endl;
+    std::cout << "Memory Required: " << currentProcessData->getMemoryRequired() << " bytes" << std::endl;
+    std::cout << "Pages Allocated: " << currentProcessData->getPagesAllocated() << std::endl;
     std::cout << "\033[0m";
     std::cout << std::endl;
 
@@ -78,6 +80,6 @@ void ProcessConsole::displayProcessInfo() {
     }
 }
 
-void ProcessConsole::updateProcessData(Process* newData) {
+void ProcessConsole::updateProcessData(std::shared_ptr<Process> newData) {
     currentProcessData = newData; 
 }

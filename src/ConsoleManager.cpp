@@ -4,6 +4,8 @@
 #include "console/MainConsole.h"
 #include "core/Process.h"
 #include "core/Scheduler.h"
+#include "memory/IMemoryAllocator.h"
+#include "memory/FlatMemoryAllocator.h"
 
 #include <iostream>
 #include <memory>
@@ -103,24 +105,18 @@ bool ConsoleManager::doesProcessExist(const std::string& name) const {
     return processes.count(name) > 0;
 }
 
-const Process* ConsoleManager::getProcess(const std::string& name) const {
+std::shared_ptr<const Process> ConsoleManager::getProcess(const std::string& name) const {
     auto it = processes.find(name);
-    if (it != processes.end()) {
-        return &(it->second);
-    }
-    return nullptr;
+    return (it != processes.end()) ? it->second : nullptr;
 }
 
-Process* ConsoleManager::getProcessMutable(const std::string& name) {
+std::shared_ptr<Process> ConsoleManager::getProcessMutable(const std::string& name) {
     auto it = processes.find(name);
-    if (it != processes.end()) {
-        return &(it->second);
-    }
-    return nullptr;
+    return (it != processes.end()) ? it->second : nullptr;
 }
 
-const std::map<std::string, Process>& ConsoleManager::getAllProcesses() const {
-    return processes; 
+const std::map<std::string, std::shared_ptr<Process>>& ConsoleManager::getAllProcesses() const {
+    return processes;
 }
 
 bool ConsoleManager::createProcessConsole(const std::string& name) {
@@ -129,34 +125,47 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
         return false;
     }
 
-    Process newProcess(name, generatePid(), getTimestamp());
-    newProcess.setStatus(ProcessStatus::NEW);
-    newProcess.setCpuCoreExecuting(-1);
-    newProcess.setFinishTime("N/A");
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
 
     if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
         std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
-        newProcess.generateRandomCommands(100); 
+        newProcess->generateRandomCommands(100);
     } else {
         static std::random_device rd;
-        static std::mt19937 gen(rd()); 
+        static std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> distrib(minInstructionsPerProcess, maxInstructionsPerProcess);
         uint32_t numInstructions = distrib(gen);
-        newProcess.generateRandomCommands(numInstructions);
-        //std::cout << "Process '" << name << "' created with " << numInstructions << " instructions." << std::endl;
+        newProcess->generateRandomCommands(numInstructions);
     }
 
-    processes[name] = std::move(newProcess);
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
+    uint32_t memoryRequired = memDistrib(gen);
+    uint32_t pagesRequired = (memoryRequired + memoryPerFrame - 1) / memoryPerFrame;
 
-    Process* processInMap = &(processes.at(name)); 
+    if (memoryAllocator) {
+        void* allocResult = memoryAllocator->allocate(newProcess);
+        if (!allocResult) {
+            std::cerr << "[ERROR] Memory allocation failed for process '" << name << "'." << std::endl;
+            return false;
+        }
+    }
+
+    newProcess->setMemory(memoryRequired, pagesRequired);
+
+    processes[name] = newProcess;
 
     if (scheduler) {
-        scheduler->addProcess(processInMap); 
+        scheduler->addProcess(newProcess);
     } else {
         std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
     }
 
-    processConsoleScreens[name] = std::make_unique<ProcessConsole>(processInMap);
+    processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
     return true;
 }
 
@@ -166,16 +175,18 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
         return;
     }
 
-    Process* processData = getProcessMutable(name);
-    if (!processData) {
-        std::cout << "Error: Process data for '" << name << "' not found internally (mutable access failed)." << std::endl;
+    auto itProcess = processes.find(name);
+    if (itProcess == processes.end()) {
+        std::cout << "Error: Process data for '" << name << "' not found in internal map." << std::endl;
         return;
     }
 
-    auto it = processConsoleScreens.find(name);
-    if (it != processConsoleScreens.end()) {
-        ProcessConsole* pc = it->second.get();
-        pc->updateProcessData(processData); 
+    std::shared_ptr<Process> processData = itProcess->second;
+
+    auto itScreen = processConsoleScreens.find(name);
+    if (itScreen != processConsoleScreens.end()) {
+        ProcessConsole* pc = itScreen->second.get();
+        pc->updateProcessData(processData);
         setActiveConsole(pc);
     } else {
         std::cout << "Process data for '" << name << "' found, but console screen not managed. Creating new screen." << std::endl;
@@ -242,7 +253,7 @@ void ConsoleManager::batchGenLoop() {
                     createBatchProcess();
                     nextBatchTickTarget += batchProcessFrequency;
 
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); //Lower for faster batch gen
                 }
             }
         }
@@ -280,9 +291,20 @@ void ConsoleManager::stopBatchGen() {
     }
 }
 
-void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec, uint32_t quantumCyc) {
+void ConsoleManager::initializeSystem(
+    int numCpus,
+    SchedulerAlgorithmType type,
+    int batchFreq,
+    uint32_t minIns,
+    uint32_t maxIns,
+    uint32_t delaysPerExec,
+    uint32_t quantumCyc,
+    uint32_t maxOverallMem,
+    uint32_t memPerFrame,
+    uint32_t minMemPerProc,
+    uint32_t maxMemPerProc
+) {
     if (schedulerStarted.load()) {
-        std::cout << "Scheduler is already running. Please stop it before re-initializing." << std::endl;
         return;
     }
 
@@ -296,7 +318,6 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
 
     scheduler = std::make_unique<Scheduler>(numCpus);
     scheduler->setAlgorithmType(type);
-
     scheduler->setDelaysPerExecution(delaysPerExec);
     scheduler->setQuantumCycles(quantumCyc);
 
@@ -304,42 +325,35 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     this->maxInstructionsPerProcess = maxIns;
     this->processDelayPerExecution = delaysPerExec;
     this->quantumCycles = quantumCyc;
+    this->maxOverallMemory = maxOverallMem;
+    this->memoryPerFrame = memPerFrame;
+    this->minMemoryPerProcess = minMemPerProc;
+    this->maxMemoryPerProcess = maxMemPerProc;
 
+    memoryAllocator = std::make_unique<FlatMemoryAllocator>(maxOverallMem);
     batchProcessFrequency = batchFreq;
 
     if (scheduler) {
+        scheduler->setProcessTerminationCallback([this](std::shared_ptr<Process> proc) {
+            std::string name = proc->getProcessName();
+
+            auto it = processes.find(name);
+            if (it != processes.end()) {
+                if (memoryAllocator) {
+                    memoryAllocator->deallocate(it->second);
+                }
+
+                processes.erase(it);
+            }
+
+            processConsoleScreens.erase(name);
+        });
+
         nextBatchTickTarget = scheduler->getSimulatedTime() + batchProcessFrequency;
     } else {
-        nextBatchTickTarget = batchProcessFrequency; 
+        nextBatchTickTarget = batchProcessFrequency;
     }
 
-    std::cout << "System initialized with " << numCpus << " CPUs and scheduler type: ";
-    switch(type) {
-        case SchedulerAlgorithmType::fcfs:
-            std::cout << "FCFS";
-            break;
-        case SchedulerAlgorithmType::rr:
-            std::cout << "Round Robin";
-            break;
-        case SchedulerAlgorithmType::NONE:
-            std::cout << "NONE (algorithm not set)";
-            break;
-    }
-    std::cout << "." << std::endl;
-
-    if (batchProcessFrequency > 0) {
-        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " Scheduler Cycles." << std::endl;
-    } else {
-        std::cout << "Batch process generation is disabled." << std::endl;
-    }
-
-    std::cout << "Process instruction range: [" << minIns << ", " << maxIns << "] instructions/process." << std::endl;
-    if (delaysPerExec == 0) {
-        std::cout << "Delay per instruction execution set to 0 CPU cycle. Will default to 1 CPU cycle." << std::endl;
-    } else {
-        std::cout << "Delay per instruction execution: " << delaysPerExec << " CPU cycles." << std::endl;
-    }
-    std::cout << "Quantum cycles for Round Robin: " << quantumCycles << " CPU cycles." << std::endl;
 }
 
 void ConsoleManager::startScheduler() {
@@ -362,7 +376,6 @@ void ConsoleManager::startScheduler() {
 }
 
 void ConsoleManager::stopScheduler() {
-
     if (schedulerStarted.load()) {
         stopBatchGen();
 
@@ -373,10 +386,10 @@ void ConsoleManager::stopScheduler() {
         }
 
         for (auto& pair : processes) {
-            Process& p = pair.second;
-            if (p.getStatus() == ProcessStatus::RUNNING) {
-                p.setStatus(ProcessStatus::PAUSED);
-                p.setCpuCoreExecuting(-1);
+            std::shared_ptr<Process>& p = pair.second;
+            if (p->getStatus() == ProcessStatus::RUNNING) {
+                p->setStatus(ProcessStatus::PAUSED);
+                p->setCpuCoreExecuting(-1);
             }
         }
 
@@ -385,15 +398,14 @@ void ConsoleManager::stopScheduler() {
     }
 }
 
-
 Scheduler* ConsoleManager::getScheduler() const {
     return scheduler.get();
 }
 
-std::vector<Process*> ConsoleManager::getProcesses() const {
-    std::vector<Process*> processList;
-    for (const auto& pair : processes) {
-        processList.push_back(const_cast<Process*>(&pair.second));  // Add process pointer to the list
+std::vector<std::shared_ptr<Process>> ConsoleManager::getProcesses() const {
+    std::vector<std::shared_ptr<Process>> list;
+    for (const auto& [_, proc] : processes) {
+        list.push_back(proc);
     }
-    return processList;
+    return list;
 }

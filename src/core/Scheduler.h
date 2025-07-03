@@ -13,6 +13,7 @@
 #include <map>
 #include <chrono>
 #include <cstdint> 
+#include <functional>
 
 class Process;
 
@@ -23,9 +24,9 @@ enum class SchedulerAlgorithmType {
 };
 
 struct SleepingProcess {
-    Process* process;
-    long long wakeUpTime; 
-    int assignedCoreId;   
+    std::shared_ptr<Process> process;
+    long long wakeUpTime;
+    int assignedCoreId;
 };
 
 class Scheduler {
@@ -33,11 +34,12 @@ public:
     Scheduler(int coreCount);
     ~Scheduler();
 
-    void addProcess(Process* process);          
-    void markCoreAvailable(int core);           
-    void start();                               
-    void stop();                                
+    void addProcess(std::shared_ptr<Process> process);
+    void markCoreAvailable(int core);
+    void start();
+    void stop();
     void resetCoreStates();
+
     void setAlgorithmType(SchedulerAlgorithmType type);
     SchedulerAlgorithmType getAlgorithmType() const;
 
@@ -51,18 +53,23 @@ public:
     void checkSleepingProcesses();
 
     void setDelaysPerExecution(uint32_t delays) { delaysPerExecution = delays; }
-
     uint32_t getDelaysPerExecution() const { return delaysPerExecution; }
-    void setQuantumCycles(uint32_t quantum) { quantumCycles = quantum; }
-private:
-    void runSchedulingLoop();                   // Scheduler thread loop
 
-    // Private functions for each algorithm's logic
+    void setQuantumCycles(uint32_t quantum) { quantumCycles = quantum; }
+    uint32_t getQuantumCycles() const { return quantumCycles; }
+
+    using ProcessTerminationCallback = std::function<void(std::shared_ptr<Process>)>;
+    void setProcessTerminationCallback(ProcessTerminationCallback callback);
+
+private:
+    void runSchedulingLoop();
+
+    // Private functions for each algorithm
     void _runFCFSLogic(std::unique_lock<std::mutex>& lock);
     void _runRoundRobinLogic(std::unique_lock<std::mutex>& lock);
 
     void _markCoreAvailableUnlocked(int core);
-    void _addProcessUnlocked(Process* process);
+    void _addProcessUnlocked(std::shared_ptr<Process> process);
     void _setAlgorithmTypeUnlocked(SchedulerAlgorithmType type);
     SchedulerAlgorithmType _getAlgorithmTypeUnlocked() const;
     int _getCoresUsedUnlocked() const;
@@ -70,28 +77,29 @@ private:
     long long _getSimulatedTimeUnlocked() const;
     void _advanceSimulatedTimeUnlocked(long long deltaTime);
     void _checkSleepingProcessesUnlocked();
-    bool _sleepQuickScan() const; 
+    bool _sleepQuickScan() const;
     bool _areAllQueuesEmptyUnlocked() const;
-    
-    std::string getCurrentTimestamp(); 
+
+    std::string getCurrentTimestamp();
 
     int numCores;
     std::vector<bool> coreAvailable;
-    std::vector<std::queue<Process*>> processQueues;
-    std::queue<Process*> globalQueue;
-    int nextCoreForNewProcess;                  
+    std::vector<std::queue<std::shared_ptr<Process>>> processQueues;
+    std::queue<std::shared_ptr<Process>> globalQueue;
+    int nextCoreForNewProcess;
 
     mutable std::mutex mtx;
     mutable std::condition_variable cv;
     std::unique_ptr<std::thread> schedulerThread;
     std::atomic<bool> running;
-    SchedulerAlgorithmType currentAlgorithm; 
+    SchedulerAlgorithmType currentAlgorithm;
 
     std::vector<SleepingProcess> sleepingProcesses;
     long long simulatedTime;
-    std::vector<Process*> coreAssignments; 
+    std::vector<std::shared_ptr<Process>> coreAssignments;
 
-    bool executeSingleCommand(Process* proc, int coreId);
+    bool executeSingleCommand(std::shared_ptr<Process> proc, int coreId);
     uint32_t delaysPerExecution;
     uint32_t quantumCycles;
+    ProcessTerminationCallback onProcessTerminatedCallback = nullptr;
 };

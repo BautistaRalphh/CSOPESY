@@ -61,160 +61,118 @@ void MainConsole::handleCommand(const std::string& command) {
             int numCpus = 0;
             try {
                 numCpus = std::stoi(config["num-cpu"]);
-                if (numCpus <= 0) {
-                    std::cerr << "Error: 'num-cpu' must be a positive integer in config.txt. Found: " << config["num-cpu"] << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                }
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "Error: Invalid 'num-cpu' value in config.txt. Must be an integer." << std::endl;
-                std::cout << "Initialization failed." << std::endl;
-                return;
-            } catch (const std::out_of_range& e) {
-                std::cerr << "Error: 'num-cpu' value out of range in config.txt." << std::endl;
+                if (numCpus <= 0) throw std::invalid_argument("non-positive");
+            } catch (...) {
+                std::cerr << "Error: Invalid or missing 'num-cpu' in config.txt." << std::endl;
                 std::cout << "Initialization failed." << std::endl;
                 return;
             }
 
             std::string schedulerTypeStr = config["scheduler"];
             SchedulerAlgorithmType algoType = SchedulerAlgorithmType::NONE;
-
-            if (schedulerTypeStr == "fcfs") {
-                algoType = SchedulerAlgorithmType::fcfs;
-            } else if (schedulerTypeStr == "rr") {
-                algoType = SchedulerAlgorithmType::rr;
-            } 
+            if (schedulerTypeStr == "fcfs") algoType = SchedulerAlgorithmType::fcfs;
+            else if (schedulerTypeStr == "rr") algoType = SchedulerAlgorithmType::rr;
             else {
                 std::cerr << "Error: Unknown 'scheduler' type in config.txt: " << schedulerTypeStr << std::endl;
-                std::cerr << "Supported types: fcfs, rr" << std::endl;
-                std::cout << "Initialization failed." << std::endl;
-                return;
-            }
-
-            if (algoType == SchedulerAlgorithmType::NONE) {
-                std::cerr << "Error: Scheduler algorithm not correctly determined from config." << std::endl;
                 std::cout << "Initialization failed." << std::endl;
                 return;
             }
 
             int batchProcessFreq = 0;
-            auto it_freq = config.find("batch-process-freq");
-            if (it_freq != config.end()) {
-                try {
-                    batchProcessFreq = std::stoi(it_freq->second);
-                    if (batchProcessFreq <= 0) {
-                        std::cerr << "Warning: 'batch-process-freq' must be a positive integer. Auto-generation disabled." << std::endl;
-                        batchProcessFreq = 0;
-                    }
-                } catch (const std::invalid_argument& e) {
-                    std::cerr << "Warning: Invalid 'batch-process-freq' value. Auto-generation disabled." << std::endl;
-                    batchProcessFreq = 0;
-                } catch (const std::out_of_range& e) {
-                    std::cerr << "Warning: 'batch-process-freq' value out of range. Auto-generation disabled." << std::endl;
-                    batchProcessFreq = 0;
-                }
-            } else {
-                std::cout << "Info: 'batch-process-freq' not found in config.txt. Auto-generation disabled." << std::endl;
+            try {
+                batchProcessFreq = std::stoi(config["batch-process-freq"]);
+                if (batchProcessFreq <= 0) batchProcessFreq = 0;
+            } catch (...) {
+                batchProcessFreq = 0;
             }
 
-            uint32_t minIns = 0;
-            auto it_min_ins = config.find("min-ins");
-            if (it_min_ins != config.end()) {
-                try {
-                    minIns = static_cast<uint32_t>(std::stoul(it_min_ins->second));
-                    if (minIns < 1) {
-                        std::cerr << "Error: 'min-ins' must be at least 1 in config.txt. Found: " << it_min_ins->second << std::endl;
-                        std::cout << "Initialization failed." << std::endl;
-                        return;
-                    }
-                } catch (const std::invalid_argument& e) {
-                    std::cerr << "Error: Invalid 'min-ins' value in config.txt. Must be an integer." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                } catch (const std::out_of_range& e) {
-                    std::cerr << "Error: 'min-ins' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                }
-            } else {
-                std::cerr << "Error: 'min-ins' not found in config.txt. Initialization failed." << std::endl;
-                return;
-            }
+            uint32_t minIns = 0, maxIns = 0, delaysPerExec = 0, quantumCycles = 0;
 
-            uint32_t maxIns = 0;
-            auto it_max_ins = config.find("max-ins");
-            if (it_max_ins != config.end()) {
-                try {
-                    maxIns = static_cast<uint32_t>(std::stoul(it_max_ins->second));
-                    if (maxIns < 1) {
-                        std::cerr << "Error: 'max-ins' must be at least 1 in config.txt. Found: " << it_max_ins->second << std::endl;
-                        std::cout << "Initialization failed." << std::endl;
-                        return;
-                    }
-                } catch (const std::invalid_argument& e) {
-                    std::cerr << "Error: Invalid 'max-ins' value in config.txt. Must be an integer." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                } catch (const std::out_of_range& e) {
-                    std::cerr << "Error: 'max-ins' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                }
-            } else {
-                std::cerr << "Error: 'max-ins' not found in config.txt. Initialization failed." << std::endl;
-                return;
-            }
-
-            if (minIns > maxIns) {
-                std::cerr << "Error: 'min-ins' (" << minIns << ") cannot be greater than 'max-ins' (" << maxIns << ") in config.txt." << std::endl;
+            try { minIns = std::stoul(config.at("min-ins")); } 
+            catch (...) {
+                std::cerr << "Error: Invalid or missing 'min-ins'." << std::endl;
                 std::cout << "Initialization failed." << std::endl;
                 return;
             }
 
-            uint32_t delaysPerExec = 0;
-            auto it_delays_per_exec = config.find("delays-per-exec");
-            if (it_delays_per_exec != config.end()) {
-                try {
-                    delaysPerExec = static_cast<uint32_t>(std::stoul(it_delays_per_exec->second));
-                } catch (const std::invalid_argument& e) {
-                    std::cerr << "Error: Invalid 'delays-per-exec' value in config.txt. Must be an integer." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                } catch (const std::out_of_range& e) {
-                    std::cerr << "Error: 'delays-per-exec' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                }
-            } else {
-                std::cerr << "Error: 'delays-per-exec' not found in config.txt. Initialization failed." << std::endl;
+            try { maxIns = std::stoul(config.at("max-ins")); }
+            catch (...) {
+                std::cerr << "Error: Invalid or missing 'max-ins'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
                 return;
             }
-            
-            uint32_t quantumCycles = 0;
-            auto it_quantum_cycles = config.find("quantum-cycles");
-            if (it_quantum_cycles != config.end()) {
-                try {
-                    quantumCycles = static_cast<uint32_t>(std::stoul(it_quantum_cycles->second));
-                    if (quantumCycles <= 0) {
-                        std::cerr << "Error: 'quantum-cycles' must be a positive integer in config.txt. Found: " << it_quantum_cycles->second << std::endl;
-                        std::cout << "Initialization failed." << std::endl;
-                        return;
-                    }
-                } catch (const std::invalid_argument& e) {
-                    std::cerr << "Error: Invalid 'quantum-cycles' value in config.txt. Must be an integer." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                } catch (const std::out_of_range& e) {
-                    std::cerr << "Error: 'quantum-cycles' value out of range (0 to 2^32-1 expected) in config.txt." << std::endl;
-                    std::cout << "Initialization failed." << std::endl;
-                    return;
-                }
-            } else {
-                std::cerr << "Error: 'quantum-cycles' not found in config.txt. Initialization failed." << std::endl;
+
+            if (minIns > maxIns) {
+                std::cerr << "Error: 'min-ins' > 'max-ins'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
                 return;
             }
-            
-            ConsoleManager::getInstance()->initializeSystem(numCpus, algoType, batchProcessFreq, minIns, maxIns, delaysPerExec, quantumCycles);
+
+            try { delaysPerExec = std::stoul(config.at("delays-per-exec")); }
+            catch (...) {
+                std::cerr << "Error: Invalid or missing 'delays-per-exec'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            try {
+                quantumCycles = std::stoul(config.at("quantum-cycles"));
+                if (quantumCycles <= 0) throw std::invalid_argument("non-positive");
+            } catch (...) {
+                std::cerr << "Error: Invalid or missing 'quantum-cycles'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            // Memory-related 
+            uint32_t maxOverallMem = 0, memPerFrame = 0, minMemPerProc = 0, maxMemPerProc = 0;
+
+            try {
+                maxOverallMem = std::stoul(config.at("max-overall-mem"));
+                if (maxOverallMem == 0) throw std::invalid_argument("zero");
+            } catch (...) {
+                std::cerr << "Error: Invalid or missing 'max-overall-mem'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            try {
+                memPerFrame = std::stoul(config.at("mem-per-frame"));
+                if (memPerFrame == 0) throw std::invalid_argument("zero");
+            } catch (...) {
+                std::cerr << "Error: Invalid or missing 'mem-per-frame'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            try {
+                minMemPerProc = std::stoul(config.at("min-mem-per-proc"));
+            } catch (...) {
+                std::cerr << "Error: Invalid or missing 'min-mem-per-proc'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            try {
+                maxMemPerProc = std::stoul(config.at("max-mem-per-proc"));
+            } catch (...) {
+                std::cerr << "Error: Invalid or missing 'max-mem-per-proc'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            if (minMemPerProc > maxMemPerProc) {
+                std::cerr << "Error: 'min-mem-per-proc' cannot be greater than 'max-mem-per-proc'." << std::endl;
+                std::cout << "Initialization failed." << std::endl;
+                return;
+            }
+
+            ConsoleManager::getInstance()->initializeSystem(
+                numCpus, algoType, batchProcessFreq,
+                minIns, maxIns, delaysPerExec, quantumCycles
+                , maxOverallMem, memPerFrame, minMemPerProc, maxMemPerProc
+            );
+
             initialized = true;
         } else {
             std::cout << "Please type 'initialize' first before using other commands." << std::endl;
@@ -251,26 +209,23 @@ void MainConsole::handleMainCommands(const std::string& command) {
         auto consoleManager = ConsoleManager::getInstance();
         Scheduler* scheduler = consoleManager->getScheduler();
         
-        const auto& allProcesses = ConsoleManager::getInstance()->getAllProcesses();
+       const auto& allProcesses = ConsoleManager::getInstance()->getProcesses();
 
-        std::vector<const Process*> activeProcesses;
-        std::vector<const Process*> finishedProcesses;
+        std::vector<std::shared_ptr<Process>> activeProcesses;
+        std::vector<std::shared_ptr<Process>> finishedProcesses;
 
-        for (const auto& pair : allProcesses) {
-            const Process& p = pair.second; 
-            if (p.getStatus() == ProcessStatus::TERMINATED) {
-                finishedProcesses.push_back(&p); 
-            } else {
-                activeProcesses.push_back(&p); 
-            }
+        for (const auto& procPtr : allProcesses) {
+            if (procPtr->getStatus() == ProcessStatus::TERMINATED)
+                finishedProcesses.push_back(procPtr);
+            else
+                activeProcesses.push_back(procPtr);
         }
 
-        std::sort(activeProcesses.begin(), activeProcesses.end(), [](const Process* a, const Process* b) {
-            return a->getCreationTime() < b->getCreationTime();  
+        std::sort(activeProcesses.begin(), activeProcesses.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
         });
-
-        std::sort(finishedProcesses.begin(), finishedProcesses.end(), [](const Process* a, const Process* b) {
-            return a->getCreationTime() < b->getCreationTime();  
+        std::sort(finishedProcesses.begin(), finishedProcesses.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
         });
 
         std::cout << "\n--- Scheduler Status ---" << std::endl;
@@ -292,7 +247,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (activeProcesses.empty()) {
             std::cout << " No active processes found." << std::endl;
         } else {
-            for (const auto* p_ptr : activeProcesses) { 
+            for (const auto& p_ptr : activeProcesses) { 
                 std::string statusStr;
                 switch (p_ptr->getStatus()) { 
                     case ProcessStatus::NEW: statusStr = "NEW"; break;
@@ -315,7 +270,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (finishedProcesses.empty()) {
             std::cout << " No finished processes found." << std::endl;
         } else {
-            for (const auto* p_ptr : finishedProcesses) { 
+            for (const auto& p_ptr : finishedProcesses) { 
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
                                 << "Status: " << "TERMINATED" 
@@ -366,18 +321,16 @@ void MainConsole::handleMainCommands(const std::string& command) {
 
         auto consoleManager = ConsoleManager::getInstance();
         Scheduler* scheduler = consoleManager->getScheduler();
-        const auto& allProcesses = ConsoleManager::getInstance()->getAllProcesses();
+        const auto& allProcesses = ConsoleManager::getInstance()->getProcesses();
 
-        std::vector<const Process*> activeProcesses;
-        std::vector<const Process*> finishedProcesses;
+        std::vector<std::shared_ptr<Process>> activeProcesses;
+        std::vector<std::shared_ptr<Process>> finishedProcesses;
 
-        for (const auto& pair : allProcesses) {
-            const Process& p = pair.second; 
-            if (p.getStatus() == ProcessStatus::TERMINATED) {
-                finishedProcesses.push_back(&p); 
-            } else {
-                activeProcesses.push_back(&p); 
-            }
+        for (const auto& procPtr : allProcesses) {
+            if (procPtr->getStatus() == ProcessStatus::TERMINATED)
+                finishedProcesses.push_back(procPtr);
+            else
+                activeProcesses.push_back(procPtr);
         }
 
         std::cout << "\n--- Scheduler Status ---" << std::endl;
@@ -399,7 +352,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (activeProcesses.empty()) {
             std::cout << " No active processes found." << std::endl;
         } else {
-            for (const auto* p_ptr : activeProcesses) { 
+            for (const auto& p_ptr : activeProcesses) { 
                 std::string statusStr;
                 switch (p_ptr->getStatus()) { 
                     case ProcessStatus::NEW: statusStr = "NEW"; break;
@@ -422,7 +375,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         if (finishedProcesses.empty()) {
             std::cout << " No finished processes found." << std::endl;
         } else {
-            for (const auto* p_ptr : finishedProcesses) { 
+            for (const auto& p_ptr : finishedProcesses) { 
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
                                 << "Status: " << "TERMINATED" 

@@ -21,8 +21,9 @@ Process::Process(const std::string& name, const std::string& p_id, const std::st
       cpuCoreExecuting(-1),
       finishTime("N/A"),
       sleeping(false),
-      wakeUpTime(0) {
-}
+      wakeUpTime(0)
+{ }
+
 
 int Process::EndFor(int forCommandIndex) const {
     if (commands[forCommandIndex].type != CommandType::FOR) {
@@ -497,5 +498,19 @@ void Process::setWakeUpTime(long long time) {
 }
 
 long long Process::getWakeUpTime() const {
+    
     return wakeUpTime;
+}
+
+void Process::setMemory(uint32_t mem, uint32_t pages) {
+    memoryRequired = mem;
+    pagesAllocated = pages;
+}
+
+uint32_t Process::getMemoryRequired() const {
+    return memoryRequired;
+}
+
+uint32_t Process::getPagesAllocated() const {
+    return pagesAllocated;
 }
