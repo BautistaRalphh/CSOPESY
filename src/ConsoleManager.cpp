@@ -342,8 +342,6 @@ void ConsoleManager::initializeSystem(
                 if (memoryAllocator) {
                     memoryAllocator->deallocate(it->second);
                 }
-
-                processes.erase(it);
             }
 
             processConsoleScreens.erase(name);
