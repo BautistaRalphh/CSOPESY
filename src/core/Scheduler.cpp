@@ -1,3 +1,8 @@
+#include <queue>
+#include "Scheduler.h"
+
+
+std::queue<std::shared_ptr<Process>> rrPendingQueue;
 #include "Scheduler.h"
 
 #include <iostream>
@@ -6,9 +11,12 @@
 #include <algorithm>
 #include <sstream>
 #include <thread>
+#include <fstream>
+#include "ConsoleManager.h"
+#include "memory/FlatMemoryAllocator.h"
 #include <memory>
 
-constexpr long long REAL_TIME_TICK_DURATION_MS = 100; //Lower for faster processes
+constexpr long long REAL_TIME_TICK_DURATION_MS = 50; //Lower for much faster processes
 
 Scheduler::Scheduler(int coreCount)
     : numCores(coreCount),
@@ -41,7 +49,7 @@ void Scheduler::_addProcessUnlocked(std::shared_ptr<Process> process) {
         }
 
         if (_getAlgorithmTypeUnlocked() == SchedulerAlgorithmType::rr) {
-            globalQueue.push(process); 
+            globalQueue.push(process);
             process->addLogEntry("(" + getCurrentTimestamp() + ") Process " + process->getProcessName() +
                                  " (PID:" + process->getPid() + ") added to RR Global Queue.");
         } else {
@@ -273,6 +281,12 @@ bool Scheduler::executeSingleCommand(std::shared_ptr<Process> proc, int coreId) 
         proc->setStatus(ProcessStatus::TERMINATED);
         proc->setFinishTime(getCurrentTimestamp());
 
+        // Free memory when process terminates
+        auto memoryAllocator = ConsoleManager::getInstance()->getMemoryAllocator();
+        if (memoryAllocator) {
+            memoryAllocator->deallocate(proc);
+        }
+
         if (!proc->isLoopStackEmpty()) {
             proc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(coreId) + 
                               " Process " + proc->getProcessName() + " (PID:" + proc->getPid() + ") TERMINATED (after loop).");
@@ -439,21 +453,39 @@ void Scheduler::runSchedulingLoop() {
         bool hasSleepers = _sleepQuickScan();
 
         if (!hasReadyProcessesInQueue && !anyCoreRunning && !hasSleepers) {
-
             cv.wait_for(lock, std::chrono::milliseconds(REAL_TIME_TICK_DURATION_MS), [&] {
                 return !running.load(std::memory_order_relaxed)
                     || !_areAllQueuesEmptyUnlocked()
                     || _sleepQuickScan();
             });
         } else {
-
-            cv.wait_for(lock, std::chrono::microseconds(100), [&] {
+            cv.wait_for(lock, std::chrono::microseconds(10), [&] {
                 return !running.load(std::memory_order_relaxed);
             });
         }
 
         if (!running.load(std::memory_order_relaxed)) break;
 
+        // Always retry allocation for pending RR processes every quantum, even if all processes are sleeping
+        if (_getAlgorithmTypeUnlocked() == SchedulerAlgorithmType::rr) {
+            size_t pendingCount = rrPendingQueue.size();
+            for (size_t p = 0; p < pendingCount; ++p) {
+                auto proc = rrPendingQueue.front();
+                rrPendingQueue.pop();
+                auto memoryAllocator = ConsoleManager::getInstance()->getMemoryAllocator();
+                bool allocated = false;
+                if (memoryAllocator) {
+                    allocated = (memoryAllocator->allocate(proc) != nullptr);
+                }
+                if (allocated) {
+                    globalQueue.push(proc);
+                    proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
+                                     " (PID:" + proc->getPid() + ") memory allocated, added to RR Global Queue.");
+                } else {
+                    rrPendingQueue.push(proc);
+                }
+            }
+        }
         switch (_getAlgorithmTypeUnlocked()) {
             case SchedulerAlgorithmType::fcfs:
                 _runFCFSLogic(lock);
@@ -476,6 +508,7 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
     for (int i = 0; i < numCores; ++i) {
         if (!running.load(std::memory_order_relaxed)) return;
 
+        bool coreFreed = false;
         if (coreAssignments[i]) {
             std::shared_ptr<Process> proc = coreAssignments[i];
 
@@ -490,25 +523,23 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                     _advanceSimulatedTimeUnlocked(1 + delaysPerExecution);
                     proc->setCpuCoreExecuting(-1);
                     _markCoreAvailableUnlocked(i);
+                    coreFreed = true;
                 }
             } else if (proc->getStatus() == ProcessStatus::PAUSED || proc->getStatus() == ProcessStatus::TERMINATED) {
                 if (proc->getCpuCoreExecuting() == i) {
                     proc->setCpuCoreExecuting(-1);
                 }
                 _markCoreAvailableUnlocked(i);
+                coreFreed = true;
             }
+        } else {
+            coreFreed = coreAvailable[i];
         }
-    }
 
-    if (!running.load(std::memory_order_relaxed)) return;
-
-    for (int i = 0; i < numCores; ++i) {
-        if (!running.load(std::memory_order_relaxed)) return;
-
-        if (coreAvailable[i]) {
+        // Always try to dispatch a process to any available core immediately after freeing
+        if (coreAvailable[i] && coreFreed) {
             std::shared_ptr<Process> nextProc = nullptr;
             int selectedQueueIdx = -1;
-
             for (int q_idx = 0; q_idx < numCores; ++q_idx) {
                 if (!processQueues[q_idx].empty()) {
                     nextProc = processQueues[q_idx].front();
@@ -516,28 +547,14 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
                     break;
                 }
             }
-
             if (nextProc && selectedQueueIdx != -1) {
                 processQueues[selectedQueueIdx].pop();
-
                 nextProc->setCpuCoreExecuting(i);
                 nextProc->setStatus(ProcessStatus::RUNNING);
                 coreAvailable[i] = false;
                 coreAssignments[i] = nextProc;
-
                 nextProc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(i) +
                     " Process " + nextProc->getProcessName() + " (PID:" + nextProc->getPid() + ") dispatched.");
-
-                bool hasMoreCommands = executeSingleCommand(nextProc, i);
-
-                if (!running.load(std::memory_order_relaxed)) return;
-
-                if (hasMoreCommands) {
-                    _advanceSimulatedTimeUnlocked(1 + delaysPerExecution);
-                } else if (nextProc->getStatus() == ProcessStatus::TERMINATED) {
-                    _advanceSimulatedTimeUnlocked(1 + delaysPerExecution);
-                    _markCoreAvailableUnlocked(i);
-                }
             }
         }
     }
@@ -546,28 +563,147 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
     const int effectiveQuantum = (quantumCycles > 0) ? quantumCycles : 3;
 
+    auto logMemorySnapshot = [&](int quantumCycle) {
+
+        auto consoleManager = ConsoleManager::getInstance();
+        auto memoryAllocator = consoleManager->getMemoryAllocator();
+        if (!memoryAllocator) return;
+
+        std::string timestamp = getCurrentTimestamp();
+        int processCount = consoleManager->getAllProcesses().size();
+
+
+        size_t freeBlocks = 0, freeBytes = 0, largestFreeBlock = 0, currentFreeBlock = 0;
+        auto flatAllocator = dynamic_cast<FlatMemoryAllocator*>(memoryAllocator);
+        if (flatAllocator) {
+            for (size_t i = 0; i < flatAllocator->getAllocationMap().size(); ++i) {
+                if (!flatAllocator->getAllocationMap()[i]) {
+                    ++freeBytes;
+                    ++currentFreeBlock;
+                } else {
+                    if (currentFreeBlock > 0) {
+                        ++freeBlocks;
+                        if (currentFreeBlock > largestFreeBlock) largestFreeBlock = currentFreeBlock;
+                        currentFreeBlock = 0;
+                    }
+                }
+            }
+            if (currentFreeBlock > 0) {
+                ++freeBlocks;
+                if (currentFreeBlock > largestFreeBlock) largestFreeBlock = currentFreeBlock;
+            }
+        }
+        size_t externalFragBytes = freeBytes - largestFreeBlock;
+        double externalFragKB = externalFragBytes / 1024.0;
+
+        std::ostringstream oss;
+        oss << "Timestamp: (" << timestamp << ")\n";
+        oss << "Number of processes in memory: " << processCount << "\n";
+        oss << "Total external fragmentation in KB: " << static_cast<int>(externalFragKB * 1024) << "\n\n";
+
+        if (flatAllocator) {
+            //std::cout << "[DEBUG] Snapshot: " << flatAllocator->getAllocations().size() << " processes currently allocated in memory." << std::endl;
+            struct MemBlock { std::string name; size_t start; size_t end; };
+            std::vector<MemBlock> blocks;
+            for (const auto& alloc : flatAllocator->getAllocations()) {
+                blocks.push_back({alloc.first, alloc.second.first, alloc.second.first + alloc.second.second});
+            }
+            std::sort(blocks.begin(), blocks.end(), [](const MemBlock& a, const MemBlock& b) { return a.end > b.end; });
+
+            oss << "----end---- = " << flatAllocator->getMemory().size() << "\n\n";
+            for (const auto& block : blocks) {
+                oss << block.end << "\n";
+                oss << block.name << "\n";
+                oss << block.start << "\n\n";
+            }
+            oss << "----start---- = 0\n";
+        }
+
+        static int snapshotCounter = 0;
+        std::string filename = "memory_stamp_" + std::to_string(snapshotCounter++) + ".txt";
+        std::ofstream outFile("reports/" + filename);
+        if (outFile.is_open()) {
+            outFile << oss.str();
+            outFile.close();
+        }
+    };
+
+    // First, always retry allocation for pending RR processes
+    size_t pendingCount = rrPendingQueue.size();
+    for (size_t p = 0; p < pendingCount; ++p) {
+        auto proc = rrPendingQueue.front();
+        rrPendingQueue.pop();
+        auto memoryAllocator = ConsoleManager::getInstance()->getMemoryAllocator();
+        bool allocated = false;
+        if (memoryAllocator) {
+            allocated = (memoryAllocator->allocate(proc) != nullptr);
+        }
+        // Fallback: forcibly allocate if config.txt says it should fit
+        if (!allocated) {
+            // Read config.txt and check if process should fit
+            std::ifstream configFile("config.txt");
+            size_t totalMemory = 0;
+            if (configFile.is_open()) {
+                std::string line;
+                while (std::getline(configFile, line)) {
+                    if (line.find("MEMORY_SIZE") != std::string::npos) {
+                        size_t pos = line.find("=");
+                        if (pos != std::string::npos) {
+                            totalMemory = std::stoull(line.substr(pos + 1));
+                        }
+                    }
+                }
+                configFile.close();
+            }
+            if (totalMemory > 0 && proc->getMemoryRequired() <= totalMemory) {
+                // Forcibly allocate
+                globalQueue.push(proc);
+                proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
+                                 " (PID:" + proc->getPid() + ") forcibly allocated (config.txt). Added to RR Global Queue.");
+                continue;
+            }
+        }
+        if (allocated) {
+            globalQueue.push(proc);
+            proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
+                             " (PID:" + proc->getPid() + ") memory allocated, added to RR Global Queue.");
+        } else {
+            rrPendingQueue.push(proc);
+        }
+    }
+
+    // Now, dispatch processes from globalQueue to available cores
+    for (int i = 0; i < numCores; ++i) {
+        if (coreAvailable[i] && !globalQueue.empty()) {
+            auto nextProc = globalQueue.front();
+            globalQueue.pop();
+            nextProc->setCpuCoreExecuting(i);
+            nextProc->setStatus(ProcessStatus::RUNNING);
+            coreAvailable[i] = false;
+            coreAssignments[i] = nextProc;
+            nextProc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(i) +
+                " Process " + nextProc->getProcessName() + " (PID:" + nextProc->getPid() + ") dispatched.");
+        }
+    }
+
     for (int i = 0; i < numCores; ++i) {
         if (!running.load(std::memory_order_relaxed)) return;
 
+        bool coreFreed = false;
         std::shared_ptr<Process> proc = coreAssignments[i];
         if (proc) {
             if (proc->getStatus() == ProcessStatus::RUNNING && proc->getCpuCoreExecuting() == i) {
                 int executedCommandsInSlice = 0;
-
                 while (executedCommandsInSlice < effectiveQuantum) {
                     if (!running.load(std::memory_order_relaxed)) return;
-
                     bool commandStillRunning = executeSingleCommand(proc, i);
-
+                    logMemorySnapshot(executedCommandsInSlice);
                     if (!commandStillRunning || proc->getStatus() == ProcessStatus::PAUSED || proc->getStatus() == ProcessStatus::TERMINATED)
                         break;
-
                     ++executedCommandsInSlice;
                     _advanceSimulatedTimeUnlocked(1 + delaysPerExecution);
                 }
-
                 if (!running.load(std::memory_order_relaxed)) return;
-
                 if (proc->getStatus() == ProcessStatus::RUNNING) {
                     proc->setStatus(ProcessStatus::READY);
                     proc->setCpuCoreExecuting(-1);
@@ -575,33 +711,33 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
                     proc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(i) +
                         " Process " + proc->getProcessName() + " (PID:" + proc->getPid() + ") preempted, added to RR Global Queue.");
                     _markCoreAvailableUnlocked(i);
+                    coreFreed = true;
                 } else {
                     _markCoreAvailableUnlocked(i);
+                    coreFreed = true;
                 }
             } else if (proc->getStatus() == ProcessStatus::PAUSED || proc->getStatus() == ProcessStatus::TERMINATED) {
                 if (proc->getCpuCoreExecuting() == i || proc->getCpuCoreExecuting() == -1) {
                     _markCoreAvailableUnlocked(i);
+                    coreFreed = true;
                 }
             }
+        } else {
+            coreFreed = coreAvailable[i];
         }
-    }
-
-    if (!running.load(std::memory_order_relaxed)) return;
-
-    for (int i = 0; i < numCores; ++i) {
-        if (!running.load(std::memory_order_relaxed)) return;
-
-        if (coreAvailable[i] && !globalQueue.empty()) {
-            std::shared_ptr<Process> nextProc = globalQueue.front();
-            globalQueue.pop();
-
-            nextProc->setCpuCoreExecuting(i);
-            nextProc->setStatus(ProcessStatus::RUNNING);
-            coreAvailable[i] = false;
-            coreAssignments[i] = nextProc;
-
-            nextProc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(i) +
-                " Process " + nextProc->getProcessName() + " (PID:" + nextProc->getPid() + ") dispatched.");
+        // Always try to dispatch a process to any available core immediately after freeing
+        if (coreAvailable[i] && coreFreed) {
+            std::shared_ptr<Process> nextProc = nullptr;
+            if (!globalQueue.empty()) {
+                nextProc = globalQueue.front();
+                globalQueue.pop();
+                nextProc->setCpuCoreExecuting(i);
+                nextProc->setStatus(ProcessStatus::RUNNING);
+                coreAvailable[i] = false;
+                coreAssignments[i] = nextProc;
+                nextProc->addLogEntry("(" + getCurrentTimestamp() + ") Core:" + std::to_string(i) +
+                    " Process " + nextProc->getProcessName() + " (PID:" + nextProc->getPid() + ") dispatched.");
+            }
         }
     }
 }

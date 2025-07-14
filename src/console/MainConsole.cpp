@@ -209,22 +209,20 @@ void MainConsole::handleMainCommands(const std::string& command) {
         auto consoleManager = ConsoleManager::getInstance();
         Scheduler* scheduler = consoleManager->getScheduler();
         
-       const auto& allProcesses = ConsoleManager::getInstance()->getProcesses();
-
+        const auto& allProcesses = ConsoleManager::getInstance()->getProcesses();
         std::vector<std::shared_ptr<Process>> activeProcesses;
-        std::vector<std::shared_ptr<Process>> finishedProcesses;
-
         for (const auto& procPtr : allProcesses) {
-            if (procPtr->getStatus() == ProcessStatus::TERMINATED)
-                finishedProcesses.push_back(procPtr);
-            else
+            if (procPtr->getStatus() != ProcessStatus::TERMINATED)
                 activeProcesses.push_back(procPtr);
         }
-
+        // Add pending processes to active list
+        const auto& pendingQueue = ConsoleManager::getInstance()->getPendingProcesses();
+        std::queue<std::shared_ptr<Process>> pendingCopy = pendingQueue;
+        while (!pendingCopy.empty()) {
+            activeProcesses.push_back(pendingCopy.front());
+            pendingCopy.pop();
+        }
         std::sort(activeProcesses.begin(), activeProcesses.end(), [](const auto& a, const auto& b) {
-            return a->getCreationTime() < b->getCreationTime();
-        });
-        std::sort(finishedProcesses.begin(), finishedProcesses.end(), [](const auto& a, const auto& b) {
             return a->getCreationTime() < b->getCreationTime();
         });
 
@@ -257,6 +255,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
                     case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break; 
                     default: statusStr = "UNKNOWN"; break;
                 }
+                // Mark pending processes
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
                                 << "Status: " << statusStr
@@ -266,11 +265,21 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
 
+        // Use ConsoleManager's finishedProcesses for display
+        const auto& finishedMap = ConsoleManager::getInstance()->getFinishedProcesses();
+        std::vector<std::shared_ptr<Process>> finishedList;
+        for (const auto& pair : finishedMap) {
+            finishedList.push_back(pair.second);
+        }
+        std::sort(finishedList.begin(), finishedList.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
+        });
+
         std::cout << "\n--- Finished Processes ---" << std::endl;
-        if (finishedProcesses.empty()) {
+        if (finishedList.empty()) {
             std::cout << " No finished processes found." << std::endl;
         } else {
-            for (const auto& p_ptr : finishedProcesses) { 
+            for (const auto& p_ptr : finishedList) { 
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
                                 << "Status: " << "TERMINATED" 
@@ -322,16 +331,14 @@ void MainConsole::handleMainCommands(const std::string& command) {
         auto consoleManager = ConsoleManager::getInstance();
         Scheduler* scheduler = consoleManager->getScheduler();
         const auto& allProcesses = ConsoleManager::getInstance()->getProcesses();
-
         std::vector<std::shared_ptr<Process>> activeProcesses;
-        std::vector<std::shared_ptr<Process>> finishedProcesses;
-
         for (const auto& procPtr : allProcesses) {
-            if (procPtr->getStatus() == ProcessStatus::TERMINATED)
-                finishedProcesses.push_back(procPtr);
-            else
+            if (procPtr->getStatus() != ProcessStatus::TERMINATED)
                 activeProcesses.push_back(procPtr);
         }
+        std::sort(activeProcesses.begin(), activeProcesses.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
+        });
 
         std::cout << "\n--- Scheduler Status ---" << std::endl;
         if (scheduler && scheduler->isRunning()) {
@@ -371,11 +378,21 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
 
+        // Use ConsoleManager's finishedProcesses for display
+        const auto& finishedMap = ConsoleManager::getInstance()->getFinishedProcesses();
+        std::vector<std::shared_ptr<Process>> finishedList;
+        for (const auto& pair : finishedMap) {
+            finishedList.push_back(pair.second);
+        }
+        std::sort(finishedList.begin(), finishedList.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
+        });
+
         std::cout << "\n--- Finished Processes ---" << std::endl;
-        if (finishedProcesses.empty()) {
+        if (finishedList.empty()) {
             std::cout << " No finished processes found." << std::endl;
         } else {
-            for (const auto& p_ptr : finishedProcesses) { 
+            for (const auto& p_ptr : finishedList) { 
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
                                 << "Status: " << "TERMINATED" 

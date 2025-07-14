@@ -23,6 +23,7 @@ class Scheduler;
 
 class ConsoleManager {
 private:
+    std::queue<std::shared_ptr<Process>> pendingProcesses;
     static ConsoleManager* instance;
     ConsoleManager();
     ConsoleManager(const ConsoleManager&) = delete; 
@@ -33,6 +34,11 @@ private:
     bool exitApp;
 
     std::map<std::string, std::shared_ptr<Process>> processes;
+    std::map<std::string, std::shared_ptr<Process>> finishedProcesses;
+
+public:
+    const std::queue<std::shared_ptr<Process>>& getPendingProcesses() const { return pendingProcesses; }
+    const std::map<std::string, std::shared_ptr<Process>>& getFinishedProcesses() const { return finishedProcesses; }
 
     std::map<std::string, std::unique_ptr<ProcessConsole>> processConsoleScreens;
 
@@ -57,6 +63,9 @@ private:
     uint32_t maxMemoryPerProcess;
 
     std::unique_ptr<IMemoryAllocator> memoryAllocator;
+
+public:
+    IMemoryAllocator* getMemoryAllocator() const { return memoryAllocator.get(); }
     void createBatchProcess();   
     void batchGenLoop();        
     void startBatchGen();

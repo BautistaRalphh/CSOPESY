@@ -1,6 +1,6 @@
-num-cpu = 8
+num-cpu = 2
 scheduler = rr
-quantum-cycles = 1
+quantum-cycles = 4
 batch-process-freq = 1
 min-ins = 100
 max-ins = 100

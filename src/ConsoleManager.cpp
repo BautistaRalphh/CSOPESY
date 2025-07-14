@@ -13,6 +13,9 @@
 #include <iomanip>
 #include <sstream>
 #include <random>
+
+#include <map>
+
 #include <filesystem>
 #include <map>
 #include <fstream>
@@ -35,6 +38,7 @@ ConsoleManager::ConsoleManager()
     : activeConsole(nullptr),
       exitApp(false),
       processes(),
+      finishedProcesses(),
       processConsoleScreens(),
       scheduler(nullptr), 
       schedulerStarted(false),
@@ -47,7 +51,8 @@ ConsoleManager::ConsoleManager()
       maxInstructionsPerProcess(0),
       processDelayPerExecution(0),
       quantumCycles(0),
-      mainConsole(std::make_unique<MainConsole>())
+      mainConsole(std::make_unique<MainConsole>()),
+      pendingProcesses()
 {
     setActiveConsole(mainConsole.get());
 }
@@ -116,7 +121,12 @@ std::shared_ptr<Process> ConsoleManager::getProcessMutable(const std::string& na
 }
 
 const std::map<std::string, std::shared_ptr<Process>>& ConsoleManager::getAllProcesses() const {
-    return processes;
+    // Combine running and finished processes for display
+    static std::map<std::string, std::shared_ptr<Process>> all;
+    all.clear();
+    all.insert(processes.begin(), processes.end());
+    all.insert(finishedProcesses.begin(), finishedProcesses.end());
+    return all;
 }
 
 bool ConsoleManager::createProcessConsole(const std::string& name) {
@@ -129,6 +139,7 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     newProcess->setStatus(ProcessStatus::NEW);
     newProcess->setCpuCoreExecuting(-1);
     newProcess->setFinishTime("N/A");
+    //std::cout << "[DEBUG] Created process: " << name << " PID:" << newProcess->getPid() << std::endl;
 
     if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
         std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
@@ -146,42 +157,46 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
     uint32_t memoryRequired = memDistrib(gen);
     uint32_t pagesRequired = (memoryRequired + memoryPerFrame - 1) / memoryPerFrame;
+    //std::cout << "[DEBUG] Process " << name << " PID:" << newProcess->getPid() << " memoryRequired: " << memoryRequired << " pagesRequired: " << pagesRequired << std::endl;
 
     if (memoryAllocator) {
+        newProcess->setMemory(memoryRequired, pagesRequired);
         void* allocResult = memoryAllocator->allocate(newProcess);
         if (!allocResult) {
-            std::cerr << "[ERROR] Memory allocation failed for process '" << name << "'." << std::endl;
+            //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "'. Added to pending queue." << std::endl;
+            pendingProcesses.push(newProcess);
             return false;
+        } else {
+            processes[name] = newProcess;
+            if (scheduler) {
+                scheduler->addProcess(newProcess);
+            } else {
+                //std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
+            }
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+            return true;
         }
     }
-
-    newProcess->setMemory(memoryRequired, pagesRequired);
-
-    processes[name] = newProcess;
-
-    if (scheduler) {
-        scheduler->addProcess(newProcess);
-    } else {
-        std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
-    }
-
-    processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
-    return true;
+    return false;
 }
 
 void ConsoleManager::switchToProcessConsole(const std::string& name) {
-    if (!doesProcessExist(name)) {
+    // Check both running and finished processes
+    std::shared_ptr<Process> processData;
+    auto itProcess = processes.find(name);
+    if (itProcess != processes.end()) {
+        processData = itProcess->second;
+    } else {
+        auto itFinished = finishedProcesses.find(name);
+        if (itFinished != finishedProcesses.end()) {
+            processData = itFinished->second;
+        }
+    }
+
+    if (!processData) {
         std::cout << "Screen '" << name << "' not found." << std::endl;
         return;
     }
-
-    auto itProcess = processes.find(name);
-    if (itProcess == processes.end()) {
-        std::cout << "Error: Process data for '" << name << "' not found in internal map." << std::endl;
-        return;
-    }
-
-    std::shared_ptr<Process> processData = itProcess->second;
 
     auto itScreen = processConsoleScreens.find(name);
     if (itScreen != processConsoleScreens.end()) {
@@ -342,6 +357,9 @@ void ConsoleManager::initializeSystem(
                 if (memoryAllocator) {
                     memoryAllocator->deallocate(it->second);
                 }
+                // Move to finishedProcesses before erasing
+                finishedProcesses[name] = it->second;
+                processes.erase(it);
             }
 
             processConsoleScreens.erase(name);

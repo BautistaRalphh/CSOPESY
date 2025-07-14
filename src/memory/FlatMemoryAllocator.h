@@ -13,14 +13,17 @@ public:
         : maximumSize(maximumSize), memory(maximumSize, '.'), allocationMap(maximumSize, false) {}
 
     void* allocate(std::shared_ptr<Process> process) override {
-        size_t size = process->getMemoryRequired(); 
+        size_t size = process->getMemoryRequired();
+        //std::cout << "[ALLOCATOR DEBUG] Requesting allocation for process '" << process->getProcessName() << "' with size=" << size << std::endl;
         for (size_t i = 0; i <= maximumSize - size; ++i) {
             if (canAllocateAt(i, size)) {
                 allocateAt(i, size);
                 allocations[process->getProcessName()] = { i, size };
+                //std::cout << "[ALLOCATOR DEBUG] Allocation succeeded for process '" << process->getProcessName() << "' at index=" << i << std::endl;
                 return &memory[i];
             }
         }
+        //std::cout << "[ALLOCATOR DEBUG] Allocation FAILED for process '" << process->getProcessName() << "' (not enough space)" << std::endl;
         return nullptr;
     }
 
@@ -50,6 +53,11 @@ private:
     std::vector<char> memory;
     std::vector<bool> allocationMap;
     std::unordered_map<std::string, std::pair<size_t, size_t>> allocations;
+
+public:
+    const std::vector<char>& getMemory() const { return memory; }
+    const std::vector<bool>& getAllocationMap() const { return allocationMap; }
+    const std::unordered_map<std::string, std::pair<size_t, size_t>>& getAllocations() const { return allocations; }
 
     bool canAllocateAt(size_t index, size_t size) const {
         for (size_t i = index; i < index + size; ++i) {
