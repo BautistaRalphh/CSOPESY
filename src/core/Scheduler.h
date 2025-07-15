@@ -61,6 +61,12 @@ public:
     using ProcessTerminationCallback = std::function<void(std::shared_ptr<Process>)>;
     void setProcessTerminationCallback(ProcessTerminationCallback callback);
 
+    void addProcessToRRPendingQueue(std::shared_ptr<Process> process) {
+        std::lock_guard<std::mutex> lock(mtx);
+        rrPendingQueue.push(process);
+        cv.notify_all(); 
+    }
+
 private:
     void runSchedulingLoop();
 
@@ -86,6 +92,7 @@ private:
     std::vector<bool> coreAvailable;
     std::vector<std::queue<std::shared_ptr<Process>>> processQueues;
     std::queue<std::shared_ptr<Process>> globalQueue;
+    std::queue<std::shared_ptr<Process>> rrPendingQueue;
     int nextCoreForNewProcess;
 
     mutable std::mutex mtx;

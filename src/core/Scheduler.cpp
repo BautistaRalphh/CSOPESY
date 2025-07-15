@@ -1,10 +1,5 @@
 #include <queue>
 #include "Scheduler.h"
-
-
-std::queue<std::shared_ptr<Process>> rrPendingQueue;
-#include "Scheduler.h"
-
 #include <iostream>
 #include <numeric>
 #include <vector>
@@ -459,7 +454,7 @@ void Scheduler::runSchedulingLoop() {
                     || _sleepQuickScan();
             });
         } else {
-            cv.wait_for(lock, std::chrono::microseconds(10), [&] {
+            cv.wait_for(lock, std::chrono::microseconds(100), [&] {
                 return !running.load(std::memory_order_relaxed);
             });
         }
@@ -563,17 +558,27 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
     const int effectiveQuantum = (quantumCycles > 0) ? quantumCycles : 3;
 
-    auto logMemorySnapshot = [&](int quantumCycle) {
-
+    auto logMemorySnapshot = [&](int quantumValue) {
         auto consoleManager = ConsoleManager::getInstance();
         auto memoryAllocator = consoleManager->getMemoryAllocator();
         if (!memoryAllocator) return;
 
         std::string timestamp = getCurrentTimestamp();
-        int processCount = consoleManager->getAllProcesses().size();
+        
+        int activeProcessCount = 0;
+        for (const auto& processPair : consoleManager->getAllProcesses()) {
+            std::shared_ptr<Process> proc = processPair.second;
+            if (proc->getStatus() == ProcessStatus::READY ||
+                proc->getStatus() == ProcessStatus::RUNNING ||
+                proc->getStatus() == ProcessStatus::PAUSED) {
+                activeProcessCount++;
+            }
+        }
 
+        size_t freeBytes = 0;
+        size_t largestFreeBlock = 0;
+        size_t currentFreeBlock = 0;
 
-        size_t freeBlocks = 0, freeBytes = 0, largestFreeBlock = 0, currentFreeBlock = 0;
         auto flatAllocator = dynamic_cast<FlatMemoryAllocator*>(memoryAllocator);
         if (flatAllocator) {
             for (size_t i = 0; i < flatAllocator->getAllocationMap().size(); ++i) {
@@ -582,27 +587,25 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
                     ++currentFreeBlock;
                 } else {
                     if (currentFreeBlock > 0) {
-                        ++freeBlocks;
                         if (currentFreeBlock > largestFreeBlock) largestFreeBlock = currentFreeBlock;
                         currentFreeBlock = 0;
                     }
                 }
             }
             if (currentFreeBlock > 0) {
-                ++freeBlocks;
                 if (currentFreeBlock > largestFreeBlock) largestFreeBlock = currentFreeBlock;
             }
         }
-        size_t externalFragBytes = freeBytes - largestFreeBlock;
-        double externalFragKB = externalFragBytes / 1024.0;
+
+        size_t externalFragBytesAsTotalFree = freeBytes;
+        double externalFragKB = externalFragBytesAsTotalFree;
 
         std::ostringstream oss;
         oss << "Timestamp: (" << timestamp << ")\n";
-        oss << "Number of processes in memory: " << processCount << "\n";
-        oss << "Total external fragmentation in KB: " << static_cast<int>(externalFragKB * 1024) << "\n\n";
+        oss << "Number of processes in memory: " << activeProcessCount << "\n";
+        oss << "Total External Fragmentation: " << static_cast<int>(externalFragKB) << "\n\n";
 
         if (flatAllocator) {
-            //std::cout << "[DEBUG] Snapshot: " << flatAllocator->getAllocations().size() << " processes currently allocated in memory." << std::endl;
             struct MemBlock { std::string name; size_t start; size_t end; };
             std::vector<MemBlock> blocks;
             for (const auto& alloc : flatAllocator->getAllocations()) {
@@ -628,51 +631,28 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
         }
     };
 
-    // First, always retry allocation for pending RR processes
     size_t pendingCount = rrPendingQueue.size();
     for (size_t p = 0; p < pendingCount; ++p) {
         auto proc = rrPendingQueue.front();
         rrPendingQueue.pop();
         auto memoryAllocator = ConsoleManager::getInstance()->getMemoryAllocator();
         bool allocated = false;
+
         if (memoryAllocator) {
             allocated = (memoryAllocator->allocate(proc) != nullptr);
         }
-        // Fallback: forcibly allocate if config.txt says it should fit
-        if (!allocated) {
-            // Read config.txt and check if process should fit
-            std::ifstream configFile("config.txt");
-            size_t totalMemory = 0;
-            if (configFile.is_open()) {
-                std::string line;
-                while (std::getline(configFile, line)) {
-                    if (line.find("MEMORY_SIZE") != std::string::npos) {
-                        size_t pos = line.find("=");
-                        if (pos != std::string::npos) {
-                            totalMemory = std::stoull(line.substr(pos + 1));
-                        }
-                    }
-                }
-                configFile.close();
-            }
-            if (totalMemory > 0 && proc->getMemoryRequired() <= totalMemory) {
-                // Forcibly allocate
-                globalQueue.push(proc);
-                proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
-                                 " (PID:" + proc->getPid() + ") forcibly allocated (config.txt). Added to RR Global Queue.");
-                continue;
-            }
-        }
+
         if (allocated) {
             globalQueue.push(proc);
             proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
                              " (PID:" + proc->getPid() + ") memory allocated, added to RR Global Queue.");
         } else {
             rrPendingQueue.push(proc);
+            proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
+                             " (PID:" + proc->getPid() + ") failed memory allocation. Remaining in pending queue.");
         }
     }
 
-    // Now, dispatch processes from globalQueue to available cores
     for (int i = 0; i < numCores; ++i) {
         if (coreAvailable[i] && !globalQueue.empty()) {
             auto nextProc = globalQueue.front();
@@ -697,12 +677,15 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
                 while (executedCommandsInSlice < effectiveQuantum) {
                     if (!running.load(std::memory_order_relaxed)) return;
                     bool commandStillRunning = executeSingleCommand(proc, i);
-                    logMemorySnapshot(executedCommandsInSlice);
+
                     if (!commandStillRunning || proc->getStatus() == ProcessStatus::PAUSED || proc->getStatus() == ProcessStatus::TERMINATED)
                         break;
                     ++executedCommandsInSlice;
                     _advanceSimulatedTimeUnlocked(1 + delaysPerExecution);
                 }
+
+                logMemorySnapshot(effectiveQuantum);
+
                 if (!running.load(std::memory_order_relaxed)) return;
                 if (proc->getStatus() == ProcessStatus::RUNNING) {
                     proc->setStatus(ProcessStatus::READY);
@@ -725,7 +708,6 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
         } else {
             coreFreed = coreAvailable[i];
         }
-        // Always try to dispatch a process to any available core immediately after freeing
         if (coreAvailable[i] && coreFreed) {
             std::shared_ptr<Process> nextProc = nullptr;
             if (!globalQueue.empty()) {

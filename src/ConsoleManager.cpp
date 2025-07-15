@@ -68,6 +68,13 @@ ConsoleManager* ConsoleManager::getInstance() {
     return instance;
 }
 
+void ConsoleManager::cleanupInstance() {
+    if (instance) {
+        delete instance;
+        instance = nullptr;
+    }
+}
+
 void ConsoleManager::setActiveConsole(AConsole* console) {
     system("cls");
     activeConsole = console;
@@ -139,7 +146,6 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     newProcess->setStatus(ProcessStatus::NEW);
     newProcess->setCpuCoreExecuting(-1);
     newProcess->setFinishTime("N/A");
-    //std::cout << "[DEBUG] Created process: " << name << " PID:" << newProcess->getPid() << std::endl;
 
     if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
         std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
@@ -152,29 +158,38 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
         newProcess->generateRandomCommands(numInstructions);
     }
 
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
+    static std::random_device rd_mem; 
+    static std::mt19937 gen_mem(rd_mem());
     std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
-    uint32_t memoryRequired = memDistrib(gen);
+    uint32_t memoryRequired = memDistrib(gen_mem);
     uint32_t pagesRequired = (memoryRequired + memoryPerFrame - 1) / memoryPerFrame;
-    //std::cout << "[DEBUG] Process " << name << " PID:" << newProcess->getPid() << " memoryRequired: " << memoryRequired << " pagesRequired: " << pagesRequired << std::endl;
 
     if (memoryAllocator) {
         newProcess->setMemory(memoryRequired, pagesRequired);
-        void* allocResult = memoryAllocator->allocate(newProcess);
-        if (!allocResult) {
-            //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "'. Added to pending queue." << std::endl;
-            pendingProcesses.push(newProcess);
-            return false;
-        } else {
-            processes[name] = newProcess;
-            if (scheduler) {
-                scheduler->addProcess(newProcess);
-            } else {
-                //std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
-            }
-            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created and added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
             return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
         }
     }
     return false;
