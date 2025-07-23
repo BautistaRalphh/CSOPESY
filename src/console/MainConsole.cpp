@@ -191,7 +191,10 @@ void MainConsole::handleMainCommands(const std::string& command) {
         std::cout << "Console is already initialized." << std::endl;
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
         std::string option = match[1].str(); 
-        std::string processName = match[2].str(); 
+        std::string processName = match[2].str();
+        std::ofstream ofs("csopesy-backing-store.txt", std::ofstream::out | std::ofstream::trunc);
+        ofs.close();
+ 
 
         if (option == "-r") {
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
