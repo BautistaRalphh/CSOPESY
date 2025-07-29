@@ -8,7 +8,6 @@
 #include <set>
 #include <string>
 #include <vector>
-#include <filesystem>
 
 class DemandPagingAllocator : public IMemoryAllocator {
 public:
@@ -22,6 +21,7 @@ public:
 
     void* allocate(std::shared_ptr<Process> process) override;
     void deallocate(std::shared_ptr<Process> process) override;
+    void visualizeMemory() const override;
     bool accessMemory(const std::string& pid, int pageNumber);
 
 private:

@@ -6,6 +6,8 @@
 #include "core/Scheduler.h"
 #include "memory/IMemoryAllocator.h"
 #include "memory/FlatMemoryAllocator.h"
+#include "memory/DemandPagingAllocator.h"
+#include "memory/BackingStore.h"
 
 #include <string>
 #include <map>
@@ -62,7 +64,7 @@ public:
     uint32_t minMemoryPerProcess;
     uint32_t maxMemoryPerProcess;
 
-    std::unique_ptr<IMemoryAllocator> memoryAllocator;
+    std::unique_ptr<DemandPagingAllocator> memoryAllocator;
 
 public:
     IMemoryAllocator* getMemoryAllocator() const { return memoryAllocator.get(); }

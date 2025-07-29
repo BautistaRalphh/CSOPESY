@@ -6,6 +6,8 @@
 #include "core/Scheduler.h"
 #include "memory/IMemoryAllocator.h"
 #include "memory/FlatMemoryAllocator.h"
+#include "memory/DemandPagingAllocator.h"
+#include "memory/BackingStore.h"
 
 #include <iostream>
 #include <memory>
@@ -360,7 +362,7 @@ void ConsoleManager::initializeSystem(
     this->minMemoryPerProcess = minMemPerProc;
     this->maxMemoryPerProcess = maxMemPerProc;
 
-    memoryAllocator = std::make_unique<FlatMemoryAllocator>(maxOverallMem);
+    memoryAllocator = std::make_unique<DemandPagingAllocator>(maxOverallMemory, memoryPerFrame, DemandPagingAllocator::PageReplacementPolicy::FIFO);
     batchProcessFrequency = batchFreq;
 
     if (scheduler) {

@@ -20,6 +20,8 @@
                 "${workspaceFolder}\\src\\core\\Process.cpp",
                 "${workspaceFolder}\\src\\console\\ProcessConsole.cpp",
                 "${workspaceFolder}\\src\\core\\Scheduler.cpp",
+                "${workspaceFolder}\\src\\memory\\DemandPagingAllocator.cpp",
+                "${workspaceFolder}\\src\\memory\\BackingStore.cpp",
                 
                 "-o",
                 "${workspaceFolder}\\main.exe"

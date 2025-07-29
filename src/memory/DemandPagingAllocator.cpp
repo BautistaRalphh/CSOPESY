@@ -10,8 +10,7 @@ DemandPagingAllocator::DemandPagingAllocator(size_t totalMemorySize, size_t fram
     : frameSize(frameSize),
       totalFrames(totalMemorySize / frameSize),
       policy(policy),
-      frameTable(totalFrames, PageInfo{"", -1})
-{
+      frameTable(totalFrames, PageInfo{"", -1}) {
     for (int i = 0; i < totalFrames; ++i) {
         freeFrames.insert(i);
     }
@@ -19,7 +18,7 @@ DemandPagingAllocator::DemandPagingAllocator(size_t totalMemorySize, size_t fram
 
 void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
     pageTables[process->getPid()] = std::unordered_map<int, int>();
-    return nullptr; // Nothing allocated immediately for demand paging
+    return nullptr;
 }
 
 void DemandPagingAllocator::deallocate(std::shared_ptr<Process> process) {
@@ -33,6 +32,24 @@ void DemandPagingAllocator::deallocate(std::shared_ptr<Process> process) {
         pageTables.erase(pid);
         fifoQueue.remove_if([&](const PageInfo& p) { return p.pid == pid; });
         lruTimestamps.erase(pid);
+    }
+}
+
+void DemandPagingAllocator::visualizeMemory() const {
+    std::cout << "Memory Visualization:\n";
+
+    std::cout << "Free Frames: ";
+    for (const auto& frame : freeFrames) {
+        std::cout << frame << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Allocated Pages: \n";
+    for (const auto& process : pageTables) {
+        for (const auto& page : process.second) {
+            std::cout << "Process " << process.first << " has page " << page.first
+                      << " in frame " << page.second << std::endl;
+        }
     }
 }
 
@@ -51,6 +68,7 @@ bool DemandPagingAllocator::accessMemory(const std::string& pid, int pageNumber)
 
 void DemandPagingAllocator::handlePageFault(const std::string& pid, int pageNumber) {
     int frameIndex;
+    
     if (!freeFrames.empty()) {
         frameIndex = *freeFrames.begin();
         freeFrames.erase(freeFrames.begin());
@@ -59,6 +77,7 @@ void DemandPagingAllocator::handlePageFault(const std::string& pid, int pageNumb
     }
 
     readPageFromStore(pid, pageNumber);
+
     frameTable[frameIndex] = PageInfo{pid, pageNumber};
     pageTables[pid][pageNumber] = frameIndex;
 
@@ -91,11 +110,15 @@ int DemandPagingAllocator::evictPage() {
     }
 
     int frameIndex = pageTables[evicted.pid][evicted.pageNumber];
+
     writePageToStore(evicted.pid, evicted.pageNumber);
+
     pageTables[evicted.pid].erase(evicted.pageNumber);
     frameTable[frameIndex] = PageInfo{"", -1};
+
     return frameIndex;
 }
+
 
 void DemandPagingAllocator::writePageToStore(const std::string& pid, int pageNumber) {
     std::vector<uint8_t> dummyData(frameSize, 0xFF);
