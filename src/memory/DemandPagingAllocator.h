@@ -24,6 +24,10 @@ public:
     void visualizeMemory() const override;
     bool accessMemory(const std::string& pid, int pageNumber);
 
+    // Memory statistics methods
+    int getPagesInPhysicalMemory(const std::string& pid) const;
+    int getPagesInBackingStore(const std::string& pid) const;
+
 private:
     size_t frameSize;
     size_t totalFrames;

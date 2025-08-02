@@ -160,3 +160,29 @@ void DemandPagingAllocator::writePageToStore(const std::string& pid, int pageNum
 void DemandPagingAllocator::readPageFromStore(const std::string& pid, int pageNumber) {
     std::vector<uint8_t> data = BackingStore::pageIn(pid, pageNumber);
 }
+
+int DemandPagingAllocator::getPagesInPhysicalMemory(const std::string& pid) const {
+    int count = 0;
+    auto it = pageTables.find(pid);
+    if (it != pageTables.end()) {
+        for (const auto& pageEntry : it->second) {
+            // If the page has a valid frame number (>= 0), it's in physical memory
+            if (pageEntry.second >= 0) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+int DemandPagingAllocator::getPagesInBackingStore(const std::string& pid) const {
+    // For simplicity, we'll calculate this as total pages allocated minus pages in physical memory
+    // In a real implementation, you might track this separately
+    auto it = pageTables.find(pid);
+    if (it != pageTables.end()) {
+        int totalPages = it->second.size();
+        int pagesInMemory = getPagesInPhysicalMemory(pid);
+        return totalPages - pagesInMemory;
+    }
+    return 0;
+}

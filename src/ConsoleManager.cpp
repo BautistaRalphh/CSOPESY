@@ -187,7 +187,7 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
         } else { 
             void* allocResult = memoryAllocator->allocate(newProcess);
             if (!allocResult) {
-                std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
                 return false;
             } else {
                 processes[name] = newProcess;
@@ -237,7 +237,7 @@ bool ConsoleManager::createCustomProcessConsole(const std::string& name, const s
         } else { 
             void* allocResult = memoryAllocator->allocate(newProcess);
             if (!allocResult) {
-                std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
                 return false;
             } else {
                 processes[name] = newProcess;

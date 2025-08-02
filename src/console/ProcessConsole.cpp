@@ -1,6 +1,7 @@
 #include "ProcessConsole.h"
 #include "ConsoleManager.h"
 #include "core/Process.h"  
+#include "memory/DemandPagingAllocator.h"
 
 #include <iostream>
 #include <iomanip>          
@@ -63,6 +64,22 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << "Finish Time: " << currentProcessData->getFinishTime() << std::endl;
     std::cout << "Memory Required: " << currentProcessData->getMemoryRequired() << " bytes" << std::endl;
     std::cout << "Pages Allocated: " << currentProcessData->getPagesAllocated() << std::endl;
+    
+    // Get additional memory information from the memory allocator
+    auto* memoryAllocator = ConsoleManager::getInstance()->getMemoryAllocator();
+    if (memoryAllocator) {
+        // Try to cast to DemandPagingAllocator to access specific methods
+        auto* demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator);
+        if (demandPagingAllocator) {
+            std::string pid = currentProcessData->getPid();
+            int pagesInPhysical = demandPagingAllocator->getPagesInPhysicalMemory(pid);
+            int pagesInBacking = demandPagingAllocator->getPagesInBackingStore(pid);
+            
+            std::cout << "Pages in Physical Memory: " << pagesInPhysical << std::endl;
+            std::cout << "Pages in Backing Store: " << pagesInBacking << std::endl;
+        }
+    }
+    
     std::cout << "\033[0m";
     std::cout << std::endl;
 
