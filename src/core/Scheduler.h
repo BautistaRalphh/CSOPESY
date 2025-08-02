@@ -52,6 +52,11 @@ public:
     void advanceSimulatedTime(long long deltaTime);
     void checkSleepingProcesses();
 
+    // CPU tick statistics
+    long long getTotalCpuTicks() const;
+    long long getActiveCpuTicks() const;
+    long long getIdleCpuTicks() const;
+
     void setDelaysPerExecution(uint32_t delays) { delaysPerExecution = delays; }
     uint32_t getDelaysPerExecution() const { return delaysPerExecution; }
 
@@ -70,7 +75,6 @@ public:
 private:
     void runSchedulingLoop();
 
-    // Private functions for each algorithm
     void _runFCFSLogic(std::unique_lock<std::mutex>& lock);
     void _runRoundRobinLogic(std::unique_lock<std::mutex>& lock);
 
@@ -108,5 +112,9 @@ private:
     bool executeSingleCommand(std::shared_ptr<Process> proc, int coreId);
     uint32_t delaysPerExecution;
     uint32_t quantumCycles;
+    
+    mutable std::atomic<long long> totalCpuTicks;
+    mutable std::atomic<long long> activeCpuTicks;
+    mutable std::atomic<long long> idleCpuTicks;
     ProcessTerminationCallback onProcessTerminatedCallback = nullptr;
 };

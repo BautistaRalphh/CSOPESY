@@ -24,6 +24,9 @@ Scheduler::Scheduler(int coreCount)
       coreAssignments(coreCount, nullptr),
       delaysPerExecution(0),
       quantumCycles(0),
+      totalCpuTicks(0),
+      activeCpuTicks(0),
+      idleCpuTicks(0),
       mtx(),
       cv() {}
 
@@ -579,6 +582,10 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
 
             if (proc->getStatus() == ProcessStatus::RUNNING) {
                 bool hasMoreCommands = executeSingleCommand(proc, i);
+                
+                // Count active CPU tick for this core
+                activeCpuTicks.fetch_add(1);
+                totalCpuTicks.fetch_add(1);
 
                 if (!running.load(std::memory_order_relaxed)) return;
 
@@ -599,6 +606,10 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
             }
         } else {
             coreFreed = coreAvailable[i];
+            if (coreAvailable[i]) {
+                idleCpuTicks.fetch_add(1);
+                totalCpuTicks.fetch_add(1);
+            }
         }
 
         if (coreAvailable[i] && coreFreed) {
@@ -676,6 +687,9 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
                 while (executedCommandsInSlice < effectiveQuantum) {
                     if (!running.load(std::memory_order_relaxed)) return;
                     bool commandStillRunning = executeSingleCommand(proc, i);
+                    
+                    activeCpuTicks.fetch_add(1);
+                    totalCpuTicks.fetch_add(1);
 
                     if (!commandStillRunning || proc->getStatus() == ProcessStatus::PAUSED || proc->getStatus() == ProcessStatus::TERMINATED)
                         break;
@@ -706,6 +720,10 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
             }
         } else {
             coreFreed = coreAvailable[i];
+            if (coreAvailable[i]) {
+                idleCpuTicks.fetch_add(1);
+                totalCpuTicks.fetch_add(1);
+            }
         }
         if (coreAvailable[i] && coreFreed) {
             std::shared_ptr<Process> nextProc = nullptr;
@@ -726,4 +744,16 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
 void Scheduler::setProcessTerminationCallback(ProcessTerminationCallback callback) {
     std::lock_guard<std::mutex> lock(mtx);
     onProcessTerminatedCallback = callback;
+}
+
+long long Scheduler::getTotalCpuTicks() const {
+    return totalCpuTicks.load();
+}
+
+long long Scheduler::getActiveCpuTicks() const {
+    return activeCpuTicks.load();
+}
+
+long long Scheduler::getIdleCpuTicks() const {
+    return idleCpuTicks.load();
 }

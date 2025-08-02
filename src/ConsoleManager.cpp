@@ -12,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <ctime>
+#include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <random>
@@ -274,22 +275,34 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
         return;
     }
 
+    if (isFinished) {
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+        std::tm localTime = *std::localtime(&now_c);
+        
+        char timeBuffer[32];
+        std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &localTime);
+        
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> hexDistrib(0x1000, 0xFFFF);
+        uint32_t memAddr = hexDistrib(gen);
+        
+        std::cout << "Process " << name << " shut down due to memory access violation error that occurred at " 
+                  << timeBuffer << ". 0x" << std::hex << std::uppercase << memAddr << std::dec 
+                  << " invalid." << std::endl;
+        return;
+    }
+
     auto itScreen = processConsoleScreens.find(name);
     if (itScreen != processConsoleScreens.end()) {
         ProcessConsole* pc = itScreen->second.get();
         pc->updateProcessData(processData);
         setActiveConsole(pc);
-        if (isFinished) {
-            std::cout << "Note: This process has terminated. You are viewing its final state." << std::endl;
-        }
     } else {
-
-        std::cout << "Creating console for " << (isFinished ? "terminated " : "") << "process '" << name << "'." << std::endl;
+        std::cout << "Creating console for process '" << name << "'." << std::endl;
         processConsoleScreens[name] = std::make_unique<ProcessConsole>(processData);
         setActiveConsole(processConsoleScreens[name].get());
-        if (isFinished) {
-            std::cout << "Note: This process has terminated. You are viewing its final state." << std::endl;
-        }
     }
 }
 
@@ -302,8 +315,6 @@ void ConsoleManager::cleanupTerminatedProcessConsole(const std::string& name) {
             std::cout << "Console for terminated process '" << name << "' has been cleaned up." << std::endl;
         }
         
-        // Optionally, you can also remove from finishedProcesses if you don't want to keep the data
-        // finishedProcesses.erase(finishedIt);
     }
 }
 
@@ -454,21 +465,19 @@ void ConsoleManager::initializeSystem(
                 if (memoryAllocator) {
                     memoryAllocator->deallocate(it->second);
                 }
-                // Move to finishedProcesses before erasing
                 finishedProcesses[name] = it->second;
                 processes.erase(it);
             }
 
-            // Keep the ProcessConsole alive for terminated processes
-            // This allows users to still view the process information and logs
-            // The console will show the terminated status and final state
-            
-            // Update the console's process data to reflect the terminated state
             auto consoleIt = processConsoleScreens.find(name);
             if (consoleIt != processConsoleScreens.end()) {
                 auto finishedProcessIt = finishedProcesses.find(name);
                 if (finishedProcessIt != finishedProcesses.end()) {
                     consoleIt->second->updateProcessData(finishedProcessIt->second);
+                }
+                
+                if (activeConsole != consoleIt->second.get()) {
+                    processConsoleScreens.erase(consoleIt);
                 }
             }
         });

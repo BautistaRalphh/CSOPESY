@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <atomic>
 
 class DemandPagingAllocator : public IMemoryAllocator {
 public:
@@ -24,9 +25,11 @@ public:
     void visualizeMemory() const override;
     bool accessMemory(const std::string& pid, int pageNumber);
 
-    // Memory statistics methods
     int getPagesInPhysicalMemory(const std::string& pid) const;
     int getPagesInBackingStore(const std::string& pid) const;
+    
+    long long getTotalPagesPagedIn() const;
+    long long getTotalPagesPagedOut() const;
 
 private:
     size_t frameSize;
@@ -47,6 +50,9 @@ private:
     std::list<PageInfo> fifoQueue;
 
     std::unordered_map<std::string, std::unordered_map<int, long long>> lruTimestamps;
+
+    mutable std::atomic<long long> totalPagesPagedIn;
+    mutable std::atomic<long long> totalPagesPagedOut;
 
     void handlePageFault(const std::string& pid, int pageNumber);
 

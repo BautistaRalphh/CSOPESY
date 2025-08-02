@@ -10,7 +10,9 @@ DemandPagingAllocator::DemandPagingAllocator(size_t totalMemorySize, size_t fram
     : frameSize(frameSize),
       totalFrames(totalMemorySize / frameSize),
       policy(policy),
-      frameTable(totalFrames, PageInfo{"", -1}) {
+      frameTable(totalFrames, PageInfo{"", -1}),
+      totalPagesPagedIn(0),
+      totalPagesPagedOut(0) {
     for (int i = 0; i < totalFrames; ++i) {
         freeFrames.insert(i);
     }
@@ -27,7 +29,6 @@ void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
         return nullptr;
     }
     
-    // Allocate frames for this process
     pageTables[pid] = std::unordered_map<int, int>();
     
     auto it = freeFrames.begin();
@@ -35,24 +36,28 @@ void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
         int frameIndex = *it;
         it = freeFrames.erase(it);
         
-        // Map page i to frame frameIndex
         pageTables[pid][i] = frameIndex;
         frameTable[frameIndex] = PageInfo{pid, static_cast<int>(i)};
         
-        // Add to FIFO queue if using FIFO policy
+        totalPagesPagedIn.fetch_add(1);
+        
+
         if (policy == PageReplacementPolicy::FIFO) {
             fifoQueue.push_back(PageInfo{pid, static_cast<int>(i)});
         }
     }
     
-    // Update the process to reflect actual allocated pages
     process->setMemory(memoryRequired, pagesNeeded);
-    return reinterpret_cast<void*>(1); // Return non-null to indicate success
+    return reinterpret_cast<void*>(1); 
 }
 
 void DemandPagingAllocator::deallocate(std::shared_ptr<Process> process) {
     std::string pid = process->getPid();
     if (pageTables.count(pid)) {
+        for (auto& entry : pageTables[pid]) {
+            totalPagesPagedOut.fetch_add(1);
+        }
+        
         for (auto& entry : pageTables[pid]) {
             int frameIndex = entry.second;
             freeFrames.insert(frameIndex);
@@ -155,10 +160,12 @@ int DemandPagingAllocator::evictPage() {
 void DemandPagingAllocator::writePageToStore(const std::string& pid, int pageNumber) {
     std::vector<uint8_t> dummyData(frameSize, 0xFF);
     BackingStore::pageOut(pid, pageNumber, dummyData);
+    totalPagesPagedOut.fetch_add(1);
 }
 
 void DemandPagingAllocator::readPageFromStore(const std::string& pid, int pageNumber) {
     std::vector<uint8_t> data = BackingStore::pageIn(pid, pageNumber);
+    totalPagesPagedIn.fetch_add(1);
 }
 
 int DemandPagingAllocator::getPagesInPhysicalMemory(const std::string& pid) const {
@@ -166,7 +173,6 @@ int DemandPagingAllocator::getPagesInPhysicalMemory(const std::string& pid) cons
     auto it = pageTables.find(pid);
     if (it != pageTables.end()) {
         for (const auto& pageEntry : it->second) {
-            // If the page has a valid frame number (>= 0), it's in physical memory
             if (pageEntry.second >= 0) {
                 count++;
             }
@@ -176,8 +182,6 @@ int DemandPagingAllocator::getPagesInPhysicalMemory(const std::string& pid) cons
 }
 
 int DemandPagingAllocator::getPagesInBackingStore(const std::string& pid) const {
-    // For simplicity, we'll calculate this as total pages allocated minus pages in physical memory
-    // In a real implementation, you might track this separately
     auto it = pageTables.find(pid);
     if (it != pageTables.end()) {
         int totalPages = it->second.size();
@@ -185,4 +189,12 @@ int DemandPagingAllocator::getPagesInBackingStore(const std::string& pid) const 
         return totalPages - pagesInMemory;
     }
     return 0;
+}
+
+long long DemandPagingAllocator::getTotalPagesPagedIn() const {
+    return totalPagesPagedIn.load();
+}
+
+long long DemandPagingAllocator::getTotalPagesPagedOut() const {
+    return totalPagesPagedOut.load();
 }

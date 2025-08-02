@@ -34,7 +34,6 @@ void ProcessConsole::handleCommand(const std::string& command) {
         std::cout << std::flush;
 
         if (currentProcessData->getStatus() == ProcessStatus::TERMINATED) {
-            std::cout << "This process has terminated. Cleaning up console..." << std::endl;
             ConsoleManager::getInstance()->cleanupTerminatedProcessConsole(currentProcessData->getProcessName());
         }
 

@@ -3,6 +3,7 @@
 #include "Process.h"      
 #include "core/Scheduler.h"
 #include "core/Process.h"
+#include "memory/DemandPagingAllocator.h"
 
 #include <regex>
 #include <iomanip>
@@ -433,6 +434,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
     } else if (command == "vmstat") {
         auto consoleManager = ConsoleManager::getInstance();
         auto memoryAllocator = consoleManager->getMemoryAllocator();
+        auto scheduler = consoleManager->getScheduler();
         
         std::cout << "\n--- Virtual Memory Statistics ---" << std::endl;
         
@@ -440,6 +442,11 @@ void MainConsole::handleMainCommands(const std::string& command) {
             std::cout << " Memory allocator not initialized." << std::endl;
             return;
         }
+        
+        // Memory Statistics
+        uint32_t totalMemory = consoleManager->maxOverallMemory;
+        uint32_t frameSize = consoleManager->memoryPerFrame;
+        uint32_t totalFrames = totalMemory / frameSize;
         
         std::vector<std::shared_ptr<Process>> allProcesses;
         
@@ -459,15 +466,128 @@ void MainConsole::handleMainCommands(const std::string& command) {
             pendingCopy.pop();
         }
         
-        std::sort(allProcesses.begin(), allProcesses.end(), [](const auto& a, const auto& b) {
-            return a->getCreationTime() < b->getCreationTime();
-        });
+        uint32_t totalMemoryUsed = 0;
+        uint32_t totalPagesAllocated = 0;
+        
+        for (const auto& process : allProcesses) {
+            uint32_t pagesAlloc = process->getPagesAllocated();
+            if (pagesAlloc > 0) {
+                totalMemoryUsed += process->getMemoryRequired();
+                totalPagesAllocated += pagesAlloc;
+            }
+        }
+        
+        uint32_t usedMemory = totalMemoryUsed;
+        uint32_t freeMemory = totalMemory - usedMemory;
+        
+        // CPU Statistics
+        long long totalCpuTicks = 0;
+        long long activeCpuTicks = 0;
+        long long idleCpuTicks = 0;
+        
+        if (scheduler) {
+            totalCpuTicks = scheduler->getTotalCpuTicks();
+            activeCpuTicks = scheduler->getActiveCpuTicks();
+            idleCpuTicks = scheduler->getIdleCpuTicks();
+        }
+        
+        // Paging Statistics
+        long long pagesPagedIn = 0;
+        long long pagesPagedOut = 0;
+        
+        // Try to cast to DemandPagingAllocator to get paging stats
+        if (auto demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator)) {
+            pagesPagedIn = demandPagingAllocator->getTotalPagesPagedIn();
+            pagesPagedOut = demandPagingAllocator->getTotalPagesPagedOut();
+        }
+        
+        // Display Statistics
+        std::cout << "\n--- Memory Information ---" << std::endl;
+        std::cout << " Total Memory: " << totalMemory << " KB" << std::endl;
+        std::cout << " Used Memory: " << usedMemory << " KB" << std::endl;
+        std::cout << " Free Memory: " << freeMemory << " KB" << std::endl;
+        std::cout << " Memory per Frame: " << frameSize << " KB" << std::endl;
+        std::cout << " Memory Utilization: " << std::fixed << std::setprecision(2) 
+                  << (static_cast<double>(usedMemory) / totalMemory * 100.0) << "%" << std::endl;
+        
+        std::cout << "\n--- CPU Information ---" << std::endl;
+        std::cout << " Total CPU Ticks: " << totalCpuTicks << std::endl;
+        std::cout << " Active CPU Ticks: " << activeCpuTicks << std::endl;
+        std::cout << " Idle CPU Ticks: " << idleCpuTicks << std::endl;
+        if (totalCpuTicks > 0) {
+            std::cout << " CPU Utilization: " << std::fixed << std::setprecision(2) 
+                      << (static_cast<double>(activeCpuTicks) / totalCpuTicks * 100.0) << "%" << std::endl;
+        }
+        
+        std::cout << "\n--- Paging Information ---" << std::endl;
+        std::cout << " Num Paged In: " << pagesPagedIn << std::endl;
+        std::cout << " Num Paged Out: " << pagesPagedOut << std::endl;
+        
+    } else if (command == "process-smi") {
+        auto consoleManager = ConsoleManager::getInstance();
+        auto memoryAllocator = consoleManager->getMemoryAllocator();
+        
+        std::cout << "\n--- Process Memory Information ---" << std::endl;
+        
+        if (!memoryAllocator) {
+            std::cout << " Memory allocator not initialized." << std::endl;
+            return;
+        }
+        
+        // Memory Statistics
+        uint32_t totalMemory = consoleManager->maxOverallMemory;
+        uint32_t frameSize = consoleManager->memoryPerFrame;
+        uint32_t totalFrames = totalMemory / frameSize;
+        
+        std::vector<std::shared_ptr<Process>> allProcesses;
+        
+        for (const auto& procPtr : consoleManager->getProcesses()) {
+            allProcesses.push_back(procPtr);
+        }
+        
+        const auto& finishedMap = consoleManager->getFinishedProcesses();
+        for (const auto& pair : finishedMap) {
+            allProcesses.push_back(pair.second);
+        }
+        
+        const auto& pendingQueue = consoleManager->getPendingProcesses();
+        std::queue<std::shared_ptr<Process>> pendingCopy = pendingQueue;
+        while (!pendingCopy.empty()) {
+            allProcesses.push_back(pendingCopy.front());
+            pendingCopy.pop();
+        }
         
         uint32_t totalMemoryUsed = 0;
         uint32_t totalPagesAllocated = 0;
         
-        std::cout << " Total Memory: " << consoleManager->maxOverallMemory << " KB" << std::endl;
-        std::cout << " Memory per Frame: " << consoleManager->memoryPerFrame << " KB" << std::endl;
+        for (const auto& process : allProcesses) {
+            uint32_t pagesAlloc = process->getPagesAllocated();
+            if (pagesAlloc > 0) {
+                totalMemoryUsed += process->getMemoryRequired();
+                totalPagesAllocated += pagesAlloc;
+            }
+        }
+        
+        uint32_t usedMemory = totalMemoryUsed;
+        uint32_t freeMemory = totalMemory - usedMemory;
+        
+        long long pagesPagedIn = 0;
+        long long pagesPagedOut = 0;
+        
+        if (auto demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator)) {
+            pagesPagedIn = demandPagingAllocator->getTotalPagesPagedIn();
+            pagesPagedOut = demandPagingAllocator->getTotalPagesPagedOut();
+        }
+        
+        std::cout << "\n--- Memory Summary ---" << std::endl;
+        std::cout << " Total Memory: " << totalMemory << " KB" << std::endl;
+        std::cout << " Used Memory: " << usedMemory << " KB" << std::endl;
+        std::cout << " Free Memory: " << freeMemory << " KB" << std::endl;
+        std::cout << " Memory per Frame: " << frameSize << " KB" << std::endl;
+        std::cout << " Memory Utilization: " << std::fixed << std::setprecision(2) 
+                  << (static_cast<double>(usedMemory) / totalMemory * 100.0) << "%" << std::endl;
+        std::cout << " Total Pages Paged In: " << pagesPagedIn << std::endl;
+        std::cout << " Total Pages Paged Out: " << pagesPagedOut << std::endl;
         
         std::cout << "\n--- Process Memory Usage ---" << std::endl;
         std::cout << std::left << std::setw(15) << "Process Name" 
@@ -475,8 +595,14 @@ void MainConsole::handleMainCommands(const std::string& command) {
                   << std::setw(12) << "Memory (KB)"
                   << std::setw(12) << "Pages Used"
                   << std::setw(15) << "Status"
+                  << std::setw(15) << "Phys. Pages"
+                  << std::setw(15) << "Store Pages"
                   << "Paging Activity" << std::endl;
-        std::cout << std::string(80, '-') << std::endl;
+        std::cout << std::string(120, '-') << std::endl;
+        
+        std::sort(allProcesses.begin(), allProcesses.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
+        });
         
         for (const auto& process : allProcesses) {
             std::string statusStr;
@@ -492,9 +618,11 @@ void MainConsole::handleMainCommands(const std::string& command) {
             uint32_t memoryReq = process->getMemoryRequired();
             uint32_t pagesAlloc = process->getPagesAllocated();
             
-            if (pagesAlloc > 0) {
-                totalMemoryUsed += memoryReq;
-                totalPagesAllocated += pagesAlloc;
+            int physicalPages = 0;
+            int storePages = 0;
+            if (auto demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator)) {
+                physicalPages = demandPagingAllocator->getPagesInPhysicalMemory(process->getPid());
+                storePages = demandPagingAllocator->getPagesInBackingStore(process->getPid());
             }
             
             std::string pagingActivity = "None";
@@ -521,16 +649,13 @@ void MainConsole::handleMainCommands(const std::string& command) {
                       << std::setw(12) << memoryReq
                       << std::setw(12) << pagesAlloc
                       << std::setw(15) << statusStr
+                      << std::setw(15) << physicalPages
+                      << std::setw(15) << storePages
                       << pagingActivity << std::endl;
         }
         
-        std::cout << std::string(80, '-') << std::endl;
-        std::cout << " Total Memory Used: " << totalMemoryUsed << " KB" << std::endl;
+        std::cout << std::string(120, '-') << std::endl;
         std::cout << " Total Pages Allocated: " << totalPagesAllocated << std::endl;
-        std::cout << " Memory Utilization: " << std::fixed << std::setprecision(2) 
-                  << (static_cast<double>(totalMemoryUsed) / consoleManager->maxOverallMemory * 100.0) << "%" << std::endl;
-        
-        uint32_t totalFrames = consoleManager->maxOverallMemory / consoleManager->memoryPerFrame;
         std::cout << " Frame Utilization: " << totalPagesAllocated << "/" << totalFrames 
                   << " (" << std::fixed << std::setprecision(2) 
                   << (static_cast<double>(totalPagesAllocated) / totalFrames * 100.0) << "%)" << std::endl;
@@ -561,7 +686,6 @@ std::vector<std::string> MainConsole::parseInstructions(const std::string& instr
         }
     }
     
-    // Add the last instruction if any
     instruction.erase(0, instruction.find_first_not_of(" \t\r\n"));
     instruction.erase(instruction.find_last_not_of(" \t\r\n") + 1);
     if (!instruction.empty()) {
