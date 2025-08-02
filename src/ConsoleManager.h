@@ -98,7 +98,9 @@ public:
     );
 
     bool createProcessConsole(const std::string& name);
+    bool createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions);
     void switchToProcessConsole(const std::string& name);
+    void cleanupTerminatedProcessConsole(const std::string& name);
     bool doesProcessExist(const std::string& name) const;
     std::shared_ptr<const Process> getProcess(const std::string& name) const;
     std::shared_ptr<Process> getProcessMutable(const std::string& name);

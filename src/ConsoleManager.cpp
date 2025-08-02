@@ -48,7 +48,6 @@ ConsoleManager::ConsoleManager()
       batchGenThread(nullptr), 
       batchGenRunning(false),
       nextBatchTickTarget(0),
-      // cpuCyclesPtr(nullptr),
       minInstructionsPerProcess(0),
       maxInstructionsPerProcess(0),
       processDelayPerExecution(0),
@@ -78,10 +77,21 @@ void ConsoleManager::cleanupInstance() {
 }
 
 void ConsoleManager::setActiveConsole(AConsole* console) {
+    if (console == nullptr) {
+        std::cerr << "[ERROR] Attempted to set null console as active" << std::endl;
+        return;
+    }
+    
     system("cls");
     activeConsole = console;
+    
     if (activeConsole != nullptr) {
-        activeConsole->onEnabled();
+        try {
+            activeConsole->onEnabled();
+        } catch (...) {
+            std::cerr << "[ERROR] Exception occurred while enabling console" << std::endl;
+            activeConsole = nullptr;
+        }
     }
 }
 
@@ -130,7 +140,6 @@ std::shared_ptr<Process> ConsoleManager::getProcessMutable(const std::string& na
 }
 
 const std::map<std::string, std::shared_ptr<Process>>& ConsoleManager::getAllProcesses() const {
-    // Combine running and finished processes for display
     static std::map<std::string, std::shared_ptr<Process>> all;
     all.clear();
     all.insert(processes.begin(), processes.end());
@@ -195,8 +204,60 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     return false;
 }
 
+bool ConsoleManager::createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions) {
+    if (doesProcessExist(name)) {
+        std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
+        return false;
+    }
+
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
+
+    for (const auto& instruction : instructions) {
+        newProcess->addCommand(instruction);
+    }
+
+    static std::random_device rd_mem; 
+    static std::mt19937 gen_mem(rd_mem());
+    std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
+    uint32_t memoryRequired = memDistrib(gen_mem);
+
+    if (memoryAllocator) {
+        newProcess->setMemory(memoryRequired, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created with custom instructions and added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void ConsoleManager::switchToProcessConsole(const std::string& name) {
     std::shared_ptr<Process> processData;
+    bool isFinished = false;
+    
     auto itProcess = processes.find(name);
     if (itProcess != processes.end()) {
         processData = itProcess->second;
@@ -204,6 +265,7 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
         auto itFinished = finishedProcesses.find(name);
         if (itFinished != finishedProcesses.end()) {
             processData = itFinished->second;
+            isFinished = true;
         }
     }
 
@@ -217,10 +279,31 @@ void ConsoleManager::switchToProcessConsole(const std::string& name) {
         ProcessConsole* pc = itScreen->second.get();
         pc->updateProcessData(processData);
         setActiveConsole(pc);
+        if (isFinished) {
+            std::cout << "Note: This process has terminated. You are viewing its final state." << std::endl;
+        }
     } else {
-        std::cout << "Process data for '" << name << "' found, but console screen not managed. Creating new screen." << std::endl;
+
+        std::cout << "Creating console for " << (isFinished ? "terminated " : "") << "process '" << name << "'." << std::endl;
         processConsoleScreens[name] = std::make_unique<ProcessConsole>(processData);
         setActiveConsole(processConsoleScreens[name].get());
+        if (isFinished) {
+            std::cout << "Note: This process has terminated. You are viewing its final state." << std::endl;
+        }
+    }
+}
+
+void ConsoleManager::cleanupTerminatedProcessConsole(const std::string& name) {
+    auto finishedIt = finishedProcesses.find(name);
+    if (finishedIt != finishedProcesses.end()) {
+        auto consoleIt = processConsoleScreens.find(name);
+        if (consoleIt != processConsoleScreens.end()) {
+            processConsoleScreens.erase(consoleIt);
+            std::cout << "Console for terminated process '" << name << "' has been cleaned up." << std::endl;
+        }
+        
+        // Optionally, you can also remove from finishedProcesses if you don't want to keep the data
+        // finishedProcesses.erase(finishedIt);
     }
 }
 
@@ -376,7 +459,18 @@ void ConsoleManager::initializeSystem(
                 processes.erase(it);
             }
 
-            processConsoleScreens.erase(name);
+            // Keep the ProcessConsole alive for terminated processes
+            // This allows users to still view the process information and logs
+            // The console will show the terminated status and final state
+            
+            // Update the console's process data to reflect the terminated state
+            auto consoleIt = processConsoleScreens.find(name);
+            if (consoleIt != processConsoleScreens.end()) {
+                auto finishedProcessIt = finishedProcesses.find(name);
+                if (finishedProcessIt != finishedProcesses.end()) {
+                    consoleIt->second->updateProcessData(finishedProcessIt->second);
+                }
+            }
         });
 
         nextBatchTickTarget = scheduler->getSimulatedTime() + batchProcessFrequency;

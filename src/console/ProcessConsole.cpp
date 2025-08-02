@@ -32,6 +32,11 @@ void ProcessConsole::handleCommand(const std::string& command) {
         std::cout << "Exiting process screen for " << currentProcessData->getProcessName() << std::endl;
         std::cout << std::flush;
 
+        if (currentProcessData->getStatus() == ProcessStatus::TERMINATED) {
+            std::cout << "This process has terminated. Cleaning up console..." << std::endl;
+            ConsoleManager::getInstance()->cleanupTerminatedProcessConsole(currentProcessData->getProcessName());
+        }
+
         ConsoleManager::getInstance()->setActiveConsole(ConsoleManager::getInstance()->getMainConsole());
     } else {
         std::cout << "Unknown command for process console: " << command << std::endl;

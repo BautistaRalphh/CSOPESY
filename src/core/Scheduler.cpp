@@ -304,7 +304,30 @@ bool Scheduler::executeSingleCommand(std::shared_ptr<Process> proc, int coreId) 
     switch (cmd->type) {
         case CommandType::PRINT: {
             if (!cmd->args.empty()) {
-                commandToLog = "PRINT " + cmd->args[0];
+                std::string printStr = cmd->args[0];
+                
+                size_t plusPos = printStr.find(" + ");
+                if (plusPos != std::string::npos) {
+                    std::string beforePlus = printStr.substr(0, plusPos);
+                    std::string afterPlus = printStr.substr(plusPos + 3);
+                    
+                    if (beforePlus.front() == '"' && beforePlus.back() == '"') {
+                        beforePlus = beforePlus.substr(1, beforePlus.length() - 2);
+                    }
+                    
+                    uint16_t varValue = 0;
+                    if (proc->getVariableValue(afterPlus, varValue)) {
+                        printStr = beforePlus + std::to_string(varValue);
+                    } else {
+                        printStr = beforePlus + "[undefined_variable:" + afterPlus + "]";
+                    }
+                } else {
+                    if (printStr.front() == '"' && printStr.back() == '"') {
+                        printStr = printStr.substr(1, printStr.length() - 2);
+                    }
+                }
+                
+                commandToLog = "PRINT " + printStr;
                 proc->addLogEntry(log.str() + commandToLog);
             }
             commandExecuted = true;
@@ -403,6 +426,54 @@ bool Scheduler::executeSingleCommand(std::shared_ptr<Process> proc, int coreId) 
             proc->addLogEntry(log.str() + commandToLog);
             commandExecuted = true;
             break;
+        case CommandType::WRITE: {
+            if (cmd->args.size() >= 2) {
+                std::string addressStr = cmd->args[0];
+                std::string varName = cmd->args[1];
+                
+                uint32_t address = 0;
+                if (addressStr.substr(0, 2) == "0x" || addressStr.substr(0, 2) == "0X") {
+                    address = std::stoul(addressStr, nullptr, 16);
+                } else {
+                    address = std::stoul(addressStr);
+                }
+                
+                uint16_t value = 0;
+                if (proc->getVariableValue(varName, value)) {
+                    proc->writeMemory(address, value);
+                    commandToLog = "WRITE " + addressStr + " " + varName + " (value: " + std::to_string(value) + ")";
+                } else {
+                    commandToLog = "WRITE failed: variable '" + varName + "' not found";
+                }
+            } else {
+                commandToLog = "WRITE command with insufficient arguments";
+            }
+            proc->addLogEntry(log.str() + commandToLog);
+            commandExecuted = true;
+            break;
+        }
+        case CommandType::READ: {
+            if (cmd->args.size() >= 2) {
+                std::string varName = cmd->args[0];
+                std::string addressStr = cmd->args[1];
+                
+                uint32_t address = 0;
+                if (addressStr.substr(0, 2) == "0x" || addressStr.substr(0, 2) == "0X") {
+                    address = std::stoul(addressStr, nullptr, 16);
+                } else {
+                    address = std::stoul(addressStr);
+                }
+                
+                uint16_t value = proc->readMemory(address);
+                proc->setVariableValue(varName, value);
+                commandToLog = "READ " + varName + " " + addressStr + " (value: " + std::to_string(value) + ")";
+            } else {
+                commandToLog = "READ command with insufficient arguments";
+            }
+            proc->addLogEntry(log.str() + commandToLog);
+            commandExecuted = true;
+            break;
+        }
         default:
             commandToLog = "Unknown or unhandled command type.";
             proc->addLogEntry(log.str() + commandToLog);
@@ -461,7 +532,6 @@ void Scheduler::runSchedulingLoop() {
 
         if (!running.load(std::memory_order_relaxed)) break;
 
-        // Always retry allocation for pending RR processes every quantum, even if all processes are sleeping
         if (_getAlgorithmTypeUnlocked() == SchedulerAlgorithmType::rr) {
             size_t pendingCount = rrPendingQueue.size();
             for (size_t p = 0; p < pendingCount; ++p) {
@@ -531,7 +601,6 @@ void Scheduler::_runFCFSLogic(std::unique_lock<std::mutex>& lock) {
             coreFreed = coreAvailable[i];
         }
 
-        // Always try to dispatch a process to any available core immediately after freeing
         if (coreAvailable[i] && coreFreed) {
             std::shared_ptr<Process> nextProc = nullptr;
             int selectedQueueIdx = -1;
@@ -559,7 +628,6 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
     const int effectiveQuantum = (quantumCycles > 0) ? quantumCycles : 3;
 
     auto logMemorySnapshot = [&](int quantumValue) {
-        // No-op: removed per-process .txt report generation
     };
 
     size_t pendingCount = rrPendingQueue.size();

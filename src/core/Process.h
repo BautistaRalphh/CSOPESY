@@ -29,7 +29,9 @@ enum class CommandType {
     SUBTRACT,
     SLEEP,
     FOR,
-    END_FOR
+    END_FOR,
+    WRITE,
+    READ
 };
 
 struct ParsedCommand {
@@ -72,6 +74,7 @@ private:
     std::string trim(const std::string& str);
 
     std::map<std::string, uint16_t> variables;
+    std::map<uint32_t, uint16_t> memory; 
     std::vector<std::string> executionLog;
 
     std::stack<LoopContext> loopStack;
@@ -111,6 +114,10 @@ public:
     void declareVariable(const std::string& varName, uint16_t value = 0);
     bool getVariableValue(const std::string& varName, uint16_t& value) const;
     void setVariableValue(const std::string& varName, uint16_t value);
+
+    // Memory operations
+    void writeMemory(uint32_t address, uint16_t value);
+    uint16_t readMemory(uint32_t address);
 
     void addLogEntry(const std::string& log);
     const std::vector<std::string>& getLogEntries() const;

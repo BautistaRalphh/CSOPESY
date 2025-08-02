@@ -47,6 +47,29 @@ int Process::EndFor(int forCommandIndex) const {
 void Process::addCommand(const std::string& rawCommand) {
     std::stringstream ss(rawCommand);
     std::string commandTypeStr;
+    
+    // Handle PRINT command with parentheses like PRINT("hello")
+    if (rawCommand.substr(0, 5) == "PRINT" || rawCommand.substr(0, 5) == "print") {
+        commandTypeStr = "PRINT";
+        std::string restOfLine = rawCommand.substr(5); 
+        if (!restOfLine.empty() && restOfLine[0] == '(') {
+
+            if (restOfLine.front() == '(' && restOfLine.back() == ')') {
+                restOfLine = restOfLine.substr(1, restOfLine.length() - 2);
+            }
+        } else if (!restOfLine.empty() && restOfLine[0] == ' ') {
+            restOfLine = restOfLine.substr(1);
+        }
+        
+        CommandType type = CommandType::PRINT;
+        std::vector<std::string> args;
+        args.push_back(restOfLine);
+        
+        commands.emplace_back(type, args, commands.size());
+        totalInstructionLines = commands.size();
+        return;
+    }
+    
     ss >> commandTypeStr;
 
     CommandType type = CommandType::UNKNOWN;
@@ -103,6 +126,20 @@ void Process::addCommand(const std::string& rawCommand) {
     }
     else if (commandTypeStr == "END_FOR") {
         type = CommandType::END_FOR;
+    }
+    else if (commandTypeStr == "WRITE") {
+        type = CommandType::WRITE;
+        std::string addressStr, varName;
+        ss >> addressStr >> varName;
+        args.push_back(addressStr);
+        args.push_back(varName);
+    }
+    else if (commandTypeStr == "READ") {
+        type = CommandType::READ;
+        std::string varName, addressStr;
+        ss >> varName >> addressStr;
+        args.push_back(varName);
+        args.push_back(addressStr);
     }
 
     commands.emplace_back(type, args, commands.size());
@@ -513,4 +550,16 @@ uint32_t Process::getMemoryRequired() const {
 
 uint32_t Process::getPagesAllocated() const {
     return pagesAllocated;
+}
+
+void Process::writeMemory(uint32_t address, uint16_t value) {
+    memory[address] = value;
+}
+
+uint16_t Process::readMemory(uint32_t address) {
+    auto it = memory.find(address);
+    if (it != memory.end()) {
+        return it->second;
+    }
+    return 0; 
 }

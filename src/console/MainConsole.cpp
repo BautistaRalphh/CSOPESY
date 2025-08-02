@@ -184,11 +184,33 @@ void MainConsole::handleCommand(const std::string& command) {
 
 void MainConsole::handleMainCommands(const std::string& command) {
     std::regex screen_cmd_regex(R"(^screen\s+(-r|-s)\s+(\w+)$)");
+    std::regex screen_custom_regex(R"(^screen\s+-c\s+(\w+)\s+\"(.+)\"$)");
     std::regex screen_ls_regex(R"(^screen\s+-ls$)");
     std::smatch match;
 
     if (command == "initialize") {
         std::cout << "Console is already initialized." << std::endl;
+    } else if (std::regex_match(command, match, screen_custom_regex)) {
+        std::string processName = match[1].str();
+        std::string instructionsStr = match[2].str();
+        
+        // Parse and validate instructions
+        std::vector<std::string> instructions = parseInstructions(instructionsStr);
+        if (instructions.empty()) {
+            std::cout << "Error: No valid instructions provided." << std::endl;
+            return;
+        }
+        
+        if (instructions.size() < 1 || instructions.size() > 50) {
+            std::cout << "Error: Invalid command. Instruction count must be between 1 and 50." << std::endl;
+            return;
+        }
+        
+        // Create process with custom instructions
+        bool created = ConsoleManager::getInstance()->createCustomProcessConsole(processName, instructions);
+        if (created) {
+            ConsoleManager::getInstance()->switchToProcessConsole(processName);
+        }
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
         std::string option = match[1].str(); 
         std::string processName = match[2].str();
@@ -518,4 +540,33 @@ void MainConsole::handleMainCommands(const std::string& command) {
     } else {
         std::cout << "Unknown command: " << command << std::endl;
     }
+}
+
+std::vector<std::string> MainConsole::parseInstructions(const std::string& instructionsStr) {
+    std::vector<std::string> instructions;
+    std::string instruction;
+    
+    for (size_t i = 0; i < instructionsStr.length(); ++i) {
+        char c = instructionsStr[i];
+        
+        if (c == ';') {
+            instruction.erase(0, instruction.find_first_not_of(" \t\r\n"));
+            instruction.erase(instruction.find_last_not_of(" \t\r\n") + 1);
+            if (!instruction.empty()) {
+                instructions.push_back(instruction);
+            }
+            instruction.clear();
+        } else {
+            instruction += c;
+        }
+    }
+    
+    // Add the last instruction if any
+    instruction.erase(0, instruction.find_first_not_of(" \t\r\n"));
+    instruction.erase(instruction.find_last_not_of(" \t\r\n") + 1);
+    if (!instruction.empty()) {
+        instructions.push_back(instruction);
+    }
+    
+    return instructions;
 }
