@@ -164,11 +164,10 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     static std::mt19937 gen_mem(rd_mem());
     std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
     uint32_t memoryRequired = memDistrib(gen_mem);
-    uint32_t pagesRequired = (memoryRequired + memoryPerFrame - 1) / memoryPerFrame;
 
     if (memoryAllocator) {
-        newProcess->setMemory(memoryRequired, pagesRequired);
-
+        newProcess->setMemory(memoryRequired, 0);
+        
         if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
             processes[name] = newProcess; 
             scheduler->addProcessToRRPendingQueue(newProcess);
@@ -180,7 +179,6 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
             void* allocResult = memoryAllocator->allocate(newProcess);
             if (!allocResult) {
                 std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
-
                 return false;
             } else {
                 processes[name] = newProcess;
@@ -198,7 +196,6 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
 }
 
 void ConsoleManager::switchToProcessConsole(const std::string& name) {
-    // Check both running and finished processes
     std::shared_ptr<Process> processData;
     auto itProcess = processes.find(name);
     if (itProcess != processes.end()) {
@@ -390,19 +387,18 @@ void ConsoleManager::initializeSystem(
 }
 
 void ConsoleManager::startScheduler() {
-    if (schedulerStarted.load()) {
-        std::cout << "Scheduler is already running." << std::endl;
-        return;
-    }
-
     if (!scheduler || scheduler->getAlgorithmType() == SchedulerAlgorithmType::NONE) {
         std::cerr << "Error: Scheduler is not initialized or algorithm is not set. Use 'initialize' command first." << std::endl;
         return;
     }
 
-    scheduler->start();
-    schedulerStarted.store(true);
+    if (!schedulerStarted.load()) {
+        // Start the scheduler if it's not running
+        scheduler->start();
+        schedulerStarted.store(true);
+    }
 
+    // Start batch generation if frequency is set and not already running
     if (batchProcessFrequency > 0) {
         startBatchGen();
     }
@@ -415,15 +411,6 @@ void ConsoleManager::stopScheduler() {
         if (scheduler) {
             scheduler->stop();
             schedulerStarted.store(false);
-        } else {
-        }
-
-        for (auto& pair : processes) {
-            std::shared_ptr<Process>& p = pair.second;
-            if (p->getStatus() == ProcessStatus::RUNNING) {
-                p->setStatus(ProcessStatus::PAUSED);
-                p->setCpuCoreExecuting(-1);
-            }
         }
 
     } else if (!scheduler) {

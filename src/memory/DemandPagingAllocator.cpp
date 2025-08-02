@@ -17,8 +17,37 @@ DemandPagingAllocator::DemandPagingAllocator(size_t totalMemorySize, size_t fram
 }
 
 void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
-    pageTables[process->getPid()] = std::unordered_map<int, int>();
-    return nullptr;
+    std::string pid = process->getPid();
+    uint32_t memoryRequired = process->getMemoryRequired();
+    uint32_t pagesNeeded = (memoryRequired + frameSize - 1) / frameSize; // Calculate pages from memory requirement
+    
+    // Check if we have enough free frames
+    if (freeFrames.size() < pagesNeeded) {
+        //std::cout << "[MEMORY] Allocation failed for process " << pid << " - not enough free frames. Need: " << pagesNeeded << ", Available: " << freeFrames.size() << std::endl;
+        return nullptr;
+    }
+    
+    // Allocate frames for this process
+    pageTables[pid] = std::unordered_map<int, int>();
+    
+    auto it = freeFrames.begin();
+    for (uint32_t i = 0; i < pagesNeeded; ++i) {
+        int frameIndex = *it;
+        it = freeFrames.erase(it);
+        
+        // Map page i to frame frameIndex
+        pageTables[pid][i] = frameIndex;
+        frameTable[frameIndex] = PageInfo{pid, static_cast<int>(i)};
+        
+        // Add to FIFO queue if using FIFO policy
+        if (policy == PageReplacementPolicy::FIFO) {
+            fifoQueue.push_back(PageInfo{pid, static_cast<int>(i)});
+        }
+    }
+    
+    // Update the process to reflect actual allocated pages
+    process->setMemory(memoryRequired, pagesNeeded);
+    return reinterpret_cast<void*>(1); // Return non-null to indicate success
 }
 
 void DemandPagingAllocator::deallocate(std::shared_ptr<Process> process) {
@@ -32,6 +61,9 @@ void DemandPagingAllocator::deallocate(std::shared_ptr<Process> process) {
         pageTables.erase(pid);
         fifoQueue.remove_if([&](const PageInfo& p) { return p.pid == pid; });
         lruTimestamps.erase(pid);
+        
+        uint32_t memoryRequired = process->getMemoryRequired();
+        process->setMemory(memoryRequired, 0);
     }
 }
 

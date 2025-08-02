@@ -559,76 +559,7 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
     const int effectiveQuantum = (quantumCycles > 0) ? quantumCycles : 3;
 
     auto logMemorySnapshot = [&](int quantumValue) {
-        auto consoleManager = ConsoleManager::getInstance();
-        auto memoryAllocator = consoleManager->getMemoryAllocator();
-        if (!memoryAllocator) return;
-
-        std::string timestamp = getCurrentTimestamp();
-        
-        int activeProcessCount = 0;
-        for (const auto& processPair : consoleManager->getAllProcesses()) {
-            std::shared_ptr<Process> proc = processPair.second;
-            if (proc->getStatus() == ProcessStatus::READY ||
-                proc->getStatus() == ProcessStatus::RUNNING ||
-                proc->getStatus() == ProcessStatus::PAUSED) {
-                activeProcessCount++;
-            }
-        }
-
-        size_t freeBytes = 0;
-        size_t largestFreeBlock = 0;
-        size_t currentFreeBlock = 0;
-
-        auto flatAllocator = dynamic_cast<FlatMemoryAllocator*>(memoryAllocator);
-        if (flatAllocator) {
-            for (size_t i = 0; i < flatAllocator->getAllocationMap().size(); ++i) {
-                if (!flatAllocator->getAllocationMap()[i]) {
-                    ++freeBytes;
-                    ++currentFreeBlock;
-                } else {
-                    if (currentFreeBlock > 0) {
-                        if (currentFreeBlock > largestFreeBlock) largestFreeBlock = currentFreeBlock;
-                        currentFreeBlock = 0;
-                    }
-                }
-            }
-            if (currentFreeBlock > 0) {
-                if (currentFreeBlock > largestFreeBlock) largestFreeBlock = currentFreeBlock;
-            }
-        }
-
-        size_t externalFragBytesAsTotalFree = freeBytes;
-        double externalFragKB = externalFragBytesAsTotalFree;
-
-        std::ostringstream oss;
-        oss << "Timestamp: (" << timestamp << ")\n";
-        oss << "Number of processes in memory: " << activeProcessCount << "\n";
-        oss << "Total External Fragmentation: " << static_cast<int>(externalFragKB) << "\n\n";
-
-        if (flatAllocator) {
-            struct MemBlock { std::string name; size_t start; size_t end; };
-            std::vector<MemBlock> blocks;
-            for (const auto& alloc : flatAllocator->getAllocations()) {
-                blocks.push_back({alloc.first, alloc.second.first, alloc.second.first + alloc.second.second});
-            }
-            std::sort(blocks.begin(), blocks.end(), [](const MemBlock& a, const MemBlock& b) { return a.end > b.end; });
-
-            oss << "----end---- = " << flatAllocator->getMemory().size() << "\n\n";
-            for (const auto& block : blocks) {
-                oss << block.end << "\n";
-                oss << block.name << "\n";
-                oss << block.start << "\n\n";
-            }
-            oss << "----start---- = 0\n";
-        }
-
-        static int snapshotCounter = 0;
-        std::string filename = "memory_stamp_" + std::to_string(snapshotCounter++) + ".txt";
-        std::ofstream outFile("reports/" + filename);
-        if (outFile.is_open()) {
-            outFile << oss.str();
-            outFile.close();
-        }
+        // No-op: removed per-process .txt report generation
     };
 
     size_t pendingCount = rrPendingQueue.size();

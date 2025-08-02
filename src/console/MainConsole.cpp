@@ -258,7 +258,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
                     case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break; 
                     default: statusStr = "UNKNOWN"; break;
                 }
-                // Mark pending processes
+
                 std::cout << " " << p_ptr->getProcessName() 
                                 << " (" << p_ptr->getCreationTime() << ") "
                                 << "Status: " << statusStr
@@ -268,7 +268,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
 
-        // Use ConsoleManager's finishedProcesses for display
         const auto& finishedMap = ConsoleManager::getInstance()->getFinishedProcesses();
         std::vector<std::shared_ptr<Process>> finishedList;
         for (const auto& pair : finishedMap) {
@@ -298,7 +297,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
         std::cout << "Scheduler started." << std::endl;
     } else if (command == "scheduler-stop") {
         ConsoleManager::getInstance()->stopBatchGen();
-        std::cout << "Scheduler stopped." << std::endl;
+        std::cout << "Batch process generation stopped. Scheduler continues running." << std::endl;
     } else if (command == "report-util") {
         std::filesystem::path reportsDirPath = "reports";
         if (!std::filesystem::exists(reportsDirPath)) {
@@ -381,7 +380,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
 
-        // Use ConsoleManager's finishedProcesses for display
         const auto& finishedMap = ConsoleManager::getInstance()->getFinishedProcesses();
         std::vector<std::shared_ptr<Process>> finishedList;
         for (const auto& pair : finishedMap) {
@@ -410,6 +408,111 @@ void MainConsole::handleMainCommands(const std::string& command) {
         reportFile << capturedOutput.str();
         reportFile.close();
         std::cout << "Scheduler report saved to " << filename << std::endl;
+    } else if (command == "vmstat") {
+        auto consoleManager = ConsoleManager::getInstance();
+        auto memoryAllocator = consoleManager->getMemoryAllocator();
+        
+        std::cout << "\n--- Virtual Memory Statistics ---" << std::endl;
+        
+        if (!memoryAllocator) {
+            std::cout << " Memory allocator not initialized." << std::endl;
+            return;
+        }
+        
+        std::vector<std::shared_ptr<Process>> allProcesses;
+        
+        for (const auto& procPtr : consoleManager->getProcesses()) {
+            allProcesses.push_back(procPtr);
+        }
+        
+        const auto& finishedMap = consoleManager->getFinishedProcesses();
+        for (const auto& pair : finishedMap) {
+            allProcesses.push_back(pair.second);
+        }
+        
+        const auto& pendingQueue = consoleManager->getPendingProcesses();
+        std::queue<std::shared_ptr<Process>> pendingCopy = pendingQueue;
+        while (!pendingCopy.empty()) {
+            allProcesses.push_back(pendingCopy.front());
+            pendingCopy.pop();
+        }
+        
+        std::sort(allProcesses.begin(), allProcesses.end(), [](const auto& a, const auto& b) {
+            return a->getCreationTime() < b->getCreationTime();
+        });
+        
+        uint32_t totalMemoryUsed = 0;
+        uint32_t totalPagesAllocated = 0;
+        
+        std::cout << " Total Memory: " << consoleManager->maxOverallMemory << " KB" << std::endl;
+        std::cout << " Memory per Frame: " << consoleManager->memoryPerFrame << " KB" << std::endl;
+        
+        std::cout << "\n--- Process Memory Usage ---" << std::endl;
+        std::cout << std::left << std::setw(15) << "Process Name" 
+                  << std::setw(12) << "PID"
+                  << std::setw(12) << "Memory (KB)"
+                  << std::setw(12) << "Pages Used"
+                  << std::setw(15) << "Status"
+                  << "Paging Activity" << std::endl;
+        std::cout << std::string(80, '-') << std::endl;
+        
+        for (const auto& process : allProcesses) {
+            std::string statusStr;
+            switch (process->getStatus()) {
+                case ProcessStatus::NEW: statusStr = "NEW"; break;
+                case ProcessStatus::READY: statusStr = "READY"; break;
+                case ProcessStatus::RUNNING: statusStr = "RUNNING"; break;
+                case ProcessStatus::PAUSED: statusStr = "PAUSED"; break;
+                case ProcessStatus::TERMINATED: statusStr = "TERMINATED"; break;
+                default: statusStr = "UNKNOWN"; break;
+            }
+            
+            uint32_t memoryReq = process->getMemoryRequired();
+            uint32_t pagesAlloc = process->getPagesAllocated();
+            
+            if (pagesAlloc > 0) {
+                totalMemoryUsed += memoryReq;
+                totalPagesAllocated += pagesAlloc;
+            }
+            
+            std::string pagingActivity = "None";
+            if (pagesAlloc == 0) {
+                if (process->getStatus() == ProcessStatus::TERMINATED) {
+                    pagingActivity = "Deallocated";
+                } else {
+                    pagingActivity = "Pending";
+                }
+            } else {
+                if (process->getStatus() == ProcessStatus::RUNNING) {
+                    pagingActivity = "Active";
+                } else if (process->getStatus() == ProcessStatus::READY || process->getStatus() == ProcessStatus::PAUSED) {
+                    pagingActivity = "Idle";
+                } else if (process->getStatus() == ProcessStatus::NEW) {
+                    pagingActivity = "Allocated";
+                } else if (process->getStatus() == ProcessStatus::TERMINATED) {
+                    pagingActivity = "Deallocated";
+                }
+            }
+            
+            std::cout << std::left << std::setw(15) << process->getProcessName()
+                      << std::setw(12) << process->getPid()
+                      << std::setw(12) << memoryReq
+                      << std::setw(12) << pagesAlloc
+                      << std::setw(15) << statusStr
+                      << pagingActivity << std::endl;
+        }
+        
+        std::cout << std::string(80, '-') << std::endl;
+        std::cout << " Total Memory Used: " << totalMemoryUsed << " KB" << std::endl;
+        std::cout << " Total Pages Allocated: " << totalPagesAllocated << std::endl;
+        std::cout << " Memory Utilization: " << std::fixed << std::setprecision(2) 
+                  << (static_cast<double>(totalMemoryUsed) / consoleManager->maxOverallMemory * 100.0) << "%" << std::endl;
+        
+        uint32_t totalFrames = consoleManager->maxOverallMemory / consoleManager->memoryPerFrame;
+        std::cout << " Frame Utilization: " << totalPagesAllocated << "/" << totalFrames 
+                  << " (" << std::fixed << std::setprecision(2) 
+                  << (static_cast<double>(totalPagesAllocated) / totalFrames * 100.0) << "%)" << std::endl;
+        
     } else if (command == "clear") {
         onEnabled(); 
     } else {
