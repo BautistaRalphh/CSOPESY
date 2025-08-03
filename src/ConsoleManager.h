@@ -98,7 +98,9 @@ public:
     );
 
     bool createProcessConsole(const std::string& name);
+    bool createProcessConsole(const std::string& name, uint32_t memorySize);
     bool createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions);
+    bool createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions, uint32_t memorySize);
     void switchToProcessConsole(const std::string& name);
     void cleanupTerminatedProcessConsole(const std::string& name);
     bool doesProcessExist(const std::string& name) const;

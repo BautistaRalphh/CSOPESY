@@ -205,6 +205,59 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
     return false;
 }
 
+bool ConsoleManager::createProcessConsole(const std::string& name, uint32_t memorySize) {
+    if (doesProcessExist(name)) {
+        std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
+        return false;
+    }
+
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
+
+    if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
+        std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
+        newProcess->generateRandomCommands(100);
+    } else {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> distrib(minInstructionsPerProcess, maxInstructionsPerProcess);
+        uint32_t numInstructions = distrib(gen);
+        newProcess->generateRandomCommands(numInstructions);
+    }
+
+    if (memoryAllocator) {
+        newProcess->setMemory(memorySize, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created with " + std::to_string(memorySize) + 
+                                     " bytes memory and added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool ConsoleManager::createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions) {
     if (doesProcessExist(name)) {
         std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
@@ -239,6 +292,51 @@ bool ConsoleManager::createCustomProcessConsole(const std::string& name, const s
             void* allocResult = memoryAllocator->allocate(newProcess);
             if (!allocResult) {
                 //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ConsoleManager::createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions, uint32_t memorySize) {
+    if (doesProcessExist(name)) {
+        std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
+        return false;
+    }
+
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
+
+    for (const auto& instruction : instructions) {
+        newProcess->addCommand(instruction);
+    }
+
+    if (memoryAllocator) {
+        newProcess->setMemory(memorySize, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created with custom instructions and memory size " + 
+                                     std::to_string(memorySize) + " bytes, added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
                 return false;
             } else {
                 processes[name] = newProcess;
@@ -496,12 +594,10 @@ void ConsoleManager::startScheduler() {
     }
 
     if (!schedulerStarted.load()) {
-        // Start the scheduler if it's not running
         scheduler->start();
         schedulerStarted.store(true);
     }
 
-    // Start batch generation if frequency is set and not already running
     if (batchProcessFrequency > 0) {
         startBatchGen();
     }

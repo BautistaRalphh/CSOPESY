@@ -184,8 +184,9 @@ void MainConsole::handleCommand(const std::string& command) {
 }
 
 void MainConsole::handleMainCommands(const std::string& command) {
-    std::regex screen_cmd_regex(R"(^screen\s+(-r|-s)\s+(\w+)$)");
-    std::regex screen_custom_regex(R"(^screen\s+-c\s+(\w+)\s+\"(.+)\"$)");
+    std::regex screen_cmd_regex(R"(^screen\s+(-r)\s+(\w+)$)");
+    std::regex screen_s_regex(R"(^screen\s+-s\s+(\w+)(?:\s+(\d+))?$)");
+    std::regex screen_custom_regex(R"(^screen\s+-c\s+(\w+)(?:\s+(\d+))?\s+\"(.+)\"$)");
     std::regex screen_ls_regex(R"(^screen\s+-ls$)");
     std::smatch match;
 
@@ -193,9 +194,9 @@ void MainConsole::handleMainCommands(const std::string& command) {
         std::cout << "Console is already initialized." << std::endl;
     } else if (std::regex_match(command, match, screen_custom_regex)) {
         std::string processName = match[1].str();
-        std::string instructionsStr = match[2].str();
+        std::string memorySizeStr = match[2].str(); 
+        std::string instructionsStr = match[3].str();
         
-        // Parse and validate instructions
         std::vector<std::string> instructions = parseInstructions(instructionsStr);
         if (instructions.empty()) {
             std::cout << "Error: No valid instructions provided." << std::endl;
@@ -207,8 +208,26 @@ void MainConsole::handleMainCommands(const std::string& command) {
             return;
         }
         
-        // Create process with custom instructions
-        bool created = ConsoleManager::getInstance()->createCustomProcessConsole(processName, instructions);
+        uint32_t memorySize = 0;
+        
+        if (memorySizeStr.empty()) {
+            auto consoleManager = ConsoleManager::getInstance();
+            memorySize = consoleManager->minMemoryPerProcess;
+        } else {
+            try {
+                memorySize = std::stoul(memorySizeStr);
+                if (memorySize < 64) {
+                    std::cout << "Error: Memory size must be at least 64 bytes." << std::endl;
+                    return;
+                }
+            } catch (...) {
+                std::cout << "Error: Invalid memory size specified." << std::endl;
+                return;
+            }
+        }
+        
+        // Create process with custom instructions and memory size
+        bool created = ConsoleManager::getInstance()->createCustomProcessConsole(processName, instructions, memorySize);
         if (created) {
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
         }
@@ -217,15 +236,38 @@ void MainConsole::handleMainCommands(const std::string& command) {
         std::string processName = match[2].str();
         std::ofstream ofs("csopesy-backing-store.txt", std::ofstream::out | std::ofstream::trunc);
         ofs.close();
- 
 
         if (option == "-r") {
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
-        } else if (option == "-s") {
-            bool created = ConsoleManager::getInstance()->createProcessConsole(processName);
-            if (created) {
-                ConsoleManager::getInstance()->switchToProcessConsole(processName);
+        }
+    } else if (std::regex_match(command, match, screen_s_regex)) {
+        std::string processName = match[1].str();
+        std::string memorySizeStr = match[2].str(); 
+        
+        std::ofstream ofs("csopesy-backing-store.txt", std::ofstream::out | std::ofstream::trunc);
+        ofs.close();
+        
+        uint32_t memorySize = 0;
+        
+        if (memorySizeStr.empty()) {
+            auto consoleManager = ConsoleManager::getInstance();
+            memorySize = consoleManager->minMemoryPerProcess;
+        } else {
+            try {
+                memorySize = std::stoul(memorySizeStr);
+                if (memorySize < 64) {
+                    std::cout << "Error: Memory size must be at least 64 bytes." << std::endl;
+                    return;
+                }
+            } catch (...) {
+                std::cout << "Error: Invalid memory size specified." << std::endl;
+                return;
             }
+        }
+        
+        bool created = ConsoleManager::getInstance()->createProcessConsole(processName, memorySize);
+        if (created) {
+            ConsoleManager::getInstance()->switchToProcessConsole(processName);
         }
     } else if (std::regex_match(command, match, screen_ls_regex)) {
         std::ostringstream oss;
@@ -241,7 +283,7 @@ void MainConsole::handleMainCommands(const std::string& command) {
             if (procPtr->getStatus() != ProcessStatus::TERMINATED)
                 activeProcesses.push_back(procPtr);
         }
-        // Add pending processes to active list
+
         const auto& pendingQueue = ConsoleManager::getInstance()->getPendingProcesses();
         std::queue<std::shared_ptr<Process>> pendingCopy = pendingQueue;
         while (!pendingCopy.empty()) {
@@ -480,7 +522,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
         uint32_t usedMemory = totalMemoryUsed;
         uint32_t freeMemory = totalMemory - usedMemory;
         
-        // CPU Statistics
         long long totalCpuTicks = 0;
         long long activeCpuTicks = 0;
         long long idleCpuTicks = 0;
@@ -491,17 +532,14 @@ void MainConsole::handleMainCommands(const std::string& command) {
             idleCpuTicks = scheduler->getIdleCpuTicks();
         }
         
-        // Paging Statistics
         long long pagesPagedIn = 0;
         long long pagesPagedOut = 0;
         
-        // Try to cast to DemandPagingAllocator to get paging stats
         if (auto demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator)) {
             pagesPagedIn = demandPagingAllocator->getTotalPagesPagedIn();
             pagesPagedOut = demandPagingAllocator->getTotalPagesPagedOut();
         }
         
-        // Display Statistics
         std::cout << "\n--- Memory Information ---" << std::endl;
         std::cout << " Total Memory: " << totalMemory << " KB" << std::endl;
         std::cout << " Used Memory: " << usedMemory << " KB" << std::endl;
@@ -527,14 +565,11 @@ void MainConsole::handleMainCommands(const std::string& command) {
         auto consoleManager = ConsoleManager::getInstance();
         auto memoryAllocator = consoleManager->getMemoryAllocator();
         
-        std::cout << "\n--- Process Memory Information ---" << std::endl;
-        
         if (!memoryAllocator) {
             std::cout << " Memory allocator not initialized." << std::endl;
             return;
         }
         
-        // Memory Statistics
         uint32_t totalMemory = consoleManager->maxOverallMemory;
         uint32_t frameSize = consoleManager->memoryPerFrame;
         uint32_t totalFrames = totalMemory / frameSize;
@@ -578,16 +613,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
             pagesPagedIn = demandPagingAllocator->getTotalPagesPagedIn();
             pagesPagedOut = demandPagingAllocator->getTotalPagesPagedOut();
         }
-        
-        std::cout << "\n--- Memory Summary ---" << std::endl;
-        std::cout << " Total Memory: " << totalMemory << " KB" << std::endl;
-        std::cout << " Used Memory: " << usedMemory << " KB" << std::endl;
-        std::cout << " Free Memory: " << freeMemory << " KB" << std::endl;
-        std::cout << " Memory per Frame: " << frameSize << " KB" << std::endl;
-        std::cout << " Memory Utilization: " << std::fixed << std::setprecision(2) 
-                  << (static_cast<double>(usedMemory) / totalMemory * 100.0) << "%" << std::endl;
-        std::cout << " Total Pages Paged In: " << pagesPagedIn << std::endl;
-        std::cout << " Total Pages Paged Out: " << pagesPagedOut << std::endl;
         
         std::cout << "\n--- Process Memory Usage ---" << std::endl;
         std::cout << std::left << std::setw(15) << "Process Name" 
