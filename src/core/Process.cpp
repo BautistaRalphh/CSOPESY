@@ -21,8 +21,9 @@ Process::Process(const std::string& name, const std::string& p_id, const std::st
       cpuCoreExecuting(-1),
       finishTime("N/A"),
       sleeping(false),
-      wakeUpTime(0) {
-}
+      wakeUpTime(0)
+{ }
+
 
 int Process::EndFor(int forCommandIndex) const {
     if (commands[forCommandIndex].type != CommandType::FOR) {
@@ -46,6 +47,29 @@ int Process::EndFor(int forCommandIndex) const {
 void Process::addCommand(const std::string& rawCommand) {
     std::stringstream ss(rawCommand);
     std::string commandTypeStr;
+    
+    // Handle PRINT command with parentheses like PRINT("hello")
+    if (rawCommand.substr(0, 5) == "PRINT" || rawCommand.substr(0, 5) == "print") {
+        commandTypeStr = "PRINT";
+        std::string restOfLine = rawCommand.substr(5); 
+        if (!restOfLine.empty() && restOfLine[0] == '(') {
+
+            if (restOfLine.front() == '(' && restOfLine.back() == ')') {
+                restOfLine = restOfLine.substr(1, restOfLine.length() - 2);
+            }
+        } else if (!restOfLine.empty() && restOfLine[0] == ' ') {
+            restOfLine = restOfLine.substr(1);
+        }
+        
+        CommandType type = CommandType::PRINT;
+        std::vector<std::string> args;
+        args.push_back(restOfLine);
+        
+        commands.emplace_back(type, args, commands.size());
+        totalInstructionLines = commands.size();
+        return;
+    }
+    
     ss >> commandTypeStr;
 
     CommandType type = CommandType::UNKNOWN;
@@ -102,6 +126,20 @@ void Process::addCommand(const std::string& rawCommand) {
     }
     else if (commandTypeStr == "END_FOR") {
         type = CommandType::END_FOR;
+    }
+    else if (commandTypeStr == "WRITE") {
+        type = CommandType::WRITE;
+        std::string addressStr, varName;
+        ss >> addressStr >> varName;
+        args.push_back(addressStr);
+        args.push_back(varName);
+    }
+    else if (commandTypeStr == "READ") {
+        type = CommandType::READ;
+        std::string varName, addressStr;
+        ss >> varName >> addressStr;
+        args.push_back(varName);
+        args.push_back(addressStr);
     }
 
     commands.emplace_back(type, args, commands.size());
@@ -497,5 +535,31 @@ void Process::setWakeUpTime(long long time) {
 }
 
 long long Process::getWakeUpTime() const {
+    
     return wakeUpTime;
+}
+
+void Process::setMemory(uint32_t mem, uint32_t pages) {
+    memoryRequired = mem;
+    pagesAllocated = pages;
+}
+
+uint32_t Process::getMemoryRequired() const {
+    return memoryRequired;
+}
+
+uint32_t Process::getPagesAllocated() const {
+    return pagesAllocated;
+}
+
+void Process::writeMemory(uint32_t address, uint16_t value) {
+    memory[address] = value;
+}
+
+uint16_t Process::readMemory(uint32_t address) {
+    auto it = memory.find(address);
+    if (it != memory.end()) {
+        return it->second;
+    }
+    return 0; 
 }

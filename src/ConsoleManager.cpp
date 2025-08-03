@@ -4,13 +4,21 @@
 #include "console/MainConsole.h"
 #include "core/Process.h"
 #include "core/Scheduler.h"
+#include "memory/IMemoryAllocator.h"
+#include "memory/FlatMemoryAllocator.h"
+#include "memory/DemandPagingAllocator.h"
+#include "memory/BackingStore.h"
 
 #include <iostream>
 #include <memory>
 #include <ctime>
+#include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <random>
+
+#include <map>
+
 #include <filesystem>
 #include <map>
 #include <fstream>
@@ -33,6 +41,7 @@ ConsoleManager::ConsoleManager()
     : activeConsole(nullptr),
       exitApp(false),
       processes(),
+      finishedProcesses(),
       processConsoleScreens(),
       scheduler(nullptr), 
       schedulerStarted(false),
@@ -40,12 +49,12 @@ ConsoleManager::ConsoleManager()
       batchGenThread(nullptr), 
       batchGenRunning(false),
       nextBatchTickTarget(0),
-      // cpuCyclesPtr(nullptr),
       minInstructionsPerProcess(0),
       maxInstructionsPerProcess(0),
       processDelayPerExecution(0),
       quantumCycles(0),
-      mainConsole(std::make_unique<MainConsole>())
+      mainConsole(std::make_unique<MainConsole>()),
+      pendingProcesses()
 {
     setActiveConsole(mainConsole.get());
 }
@@ -61,11 +70,29 @@ ConsoleManager* ConsoleManager::getInstance() {
     return instance;
 }
 
+void ConsoleManager::cleanupInstance() {
+    if (instance) {
+        delete instance;
+        instance = nullptr;
+    }
+}
+
 void ConsoleManager::setActiveConsole(AConsole* console) {
+    if (console == nullptr) {
+        std::cerr << "[ERROR] Attempted to set null console as active" << std::endl;
+        return;
+    }
+    
     system("cls");
     activeConsole = console;
+    
     if (activeConsole != nullptr) {
-        activeConsole->onEnabled();
+        try {
+            activeConsole->onEnabled();
+        } catch (...) {
+            std::cerr << "[ERROR] Exception occurred while enabling console" << std::endl;
+            activeConsole = nullptr;
+        }
     }
 }
 
@@ -103,24 +130,22 @@ bool ConsoleManager::doesProcessExist(const std::string& name) const {
     return processes.count(name) > 0;
 }
 
-const Process* ConsoleManager::getProcess(const std::string& name) const {
+std::shared_ptr<const Process> ConsoleManager::getProcess(const std::string& name) const {
     auto it = processes.find(name);
-    if (it != processes.end()) {
-        return &(it->second);
-    }
-    return nullptr;
+    return (it != processes.end()) ? it->second : nullptr;
 }
 
-Process* ConsoleManager::getProcessMutable(const std::string& name) {
+std::shared_ptr<Process> ConsoleManager::getProcessMutable(const std::string& name) {
     auto it = processes.find(name);
-    if (it != processes.end()) {
-        return &(it->second);
-    }
-    return nullptr;
+    return (it != processes.end()) ? it->second : nullptr;
 }
 
-const std::map<std::string, Process>& ConsoleManager::getAllProcesses() const {
-    return processes; 
+const std::map<std::string, std::shared_ptr<Process>>& ConsoleManager::getAllProcesses() const {
+    static std::map<std::string, std::shared_ptr<Process>> all;
+    all.clear();
+    all.insert(processes.begin(), processes.end());
+    all.insert(finishedProcesses.begin(), finishedProcesses.end());
+    return all;
 }
 
 bool ConsoleManager::createProcessConsole(const std::string& name) {
@@ -129,58 +154,265 @@ bool ConsoleManager::createProcessConsole(const std::string& name) {
         return false;
     }
 
-    Process newProcess(name, generatePid(), getTimestamp());
-    newProcess.setStatus(ProcessStatus::NEW);
-    newProcess.setCpuCoreExecuting(-1);
-    newProcess.setFinishTime("N/A");
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
 
     if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
         std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
-        newProcess.generateRandomCommands(100); 
+        newProcess->generateRandomCommands(100);
     } else {
         static std::random_device rd;
-        static std::mt19937 gen(rd()); 
+        static std::mt19937 gen(rd());
         std::uniform_int_distribution<uint32_t> distrib(minInstructionsPerProcess, maxInstructionsPerProcess);
         uint32_t numInstructions = distrib(gen);
-        newProcess.generateRandomCommands(numInstructions);
-        //std::cout << "Process '" << name << "' created with " << numInstructions << " instructions." << std::endl;
+        newProcess->generateRandomCommands(numInstructions);
     }
 
-    processes[name] = std::move(newProcess);
+    static std::random_device rd_mem; 
+    static std::mt19937 gen_mem(rd_mem());
+    std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
+    uint32_t memoryRequired = memDistrib(gen_mem);
 
-    Process* processInMap = &(processes.at(name)); 
+    if (memoryAllocator) {
+        newProcess->setMemory(memoryRequired, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created and added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
-    if (scheduler) {
-        scheduler->addProcess(processInMap); 
+bool ConsoleManager::createProcessConsole(const std::string& name, uint32_t memorySize) {
+    if (doesProcessExist(name)) {
+        std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
+        return false;
+    }
+
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
+
+    if (minInstructionsPerProcess == 0 || maxInstructionsPerProcess == 0 || minInstructionsPerProcess > maxInstructionsPerProcess) {
+        std::cerr << "[ERROR] Process instruction range (min-ins, max-ins) is not properly initialized or invalid. Defaulting to 100 instructions." << std::endl;
+        newProcess->generateRandomCommands(100);
     } else {
-        std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution." << std::endl;
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> distrib(minInstructionsPerProcess, maxInstructionsPerProcess);
+        uint32_t numInstructions = distrib(gen);
+        newProcess->generateRandomCommands(numInstructions);
     }
 
-    processConsoleScreens[name] = std::make_unique<ProcessConsole>(processInMap);
-    return true;
+    if (memoryAllocator) {
+        newProcess->setMemory(memorySize, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created with " + std::to_string(memorySize) + 
+                                     " bytes memory and added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ConsoleManager::createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions) {
+    if (doesProcessExist(name)) {
+        std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
+        return false;
+    }
+
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
+
+    for (const auto& instruction : instructions) {
+        newProcess->addCommand(instruction);
+    }
+
+    static std::random_device rd_mem; 
+    static std::mt19937 gen_mem(rd_mem());
+    std::uniform_int_distribution<uint32_t> memDistrib(minMemoryPerProcess, maxMemoryPerProcess);
+    uint32_t memoryRequired = memDistrib(gen_mem);
+
+    if (memoryAllocator) {
+        newProcess->setMemory(memoryRequired, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created with custom instructions and added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                //std::cerr << "[ERROR] Memory allocation failed for process '" << name << "' (FCFS/immediate allocation required). Process not created/queued." << std::endl;
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ConsoleManager::createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions, uint32_t memorySize) {
+    if (doesProcessExist(name)) {
+        std::cout << "Screen '" << name << "' already exists. Use 'screen -r " << name << "' to resume." << std::endl;
+        return false;
+    }
+
+    auto newProcess = std::make_shared<Process>(name, generatePid(), getTimestamp());
+    newProcess->setStatus(ProcessStatus::NEW);
+    newProcess->setCpuCoreExecuting(-1);
+    newProcess->setFinishTime("N/A");
+
+    for (const auto& instruction : instructions) {
+        newProcess->addCommand(instruction);
+    }
+
+    if (memoryAllocator) {
+        newProcess->setMemory(memorySize, 0);
+        
+        if (scheduler && scheduler->getAlgorithmType() == SchedulerAlgorithmType::rr) {
+            processes[name] = newProcess; 
+            scheduler->addProcessToRRPendingQueue(newProcess);
+            newProcess->addLogEntry("(" + getTimestamp() + ") Process " + newProcess->getProcessName() +
+                                     " (PID:" + newProcess->getPid() + ") created with custom instructions and memory size " + 
+                                     std::to_string(memorySize) + " bytes, added to RR pending queue (awaiting memory allocation).");
+            processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess); 
+            return true;
+        } else { 
+            void* allocResult = memoryAllocator->allocate(newProcess);
+            if (!allocResult) {
+                return false;
+            } else {
+                processes[name] = newProcess;
+                if (scheduler) {
+                    scheduler->addProcess(newProcess); 
+                } else {
+                    std::cerr << "[WARNING] Scheduler not initialized. Process '" << name << "' created but not queued for execution (FCFS scenario)." << std::endl;
+                }
+                processConsoleScreens[name] = std::make_unique<ProcessConsole>(newProcess);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void ConsoleManager::switchToProcessConsole(const std::string& name) {
-    if (!doesProcessExist(name)) {
+    std::shared_ptr<Process> processData;
+    bool isFinished = false;
+    
+    auto itProcess = processes.find(name);
+    if (itProcess != processes.end()) {
+        processData = itProcess->second;
+    } else {
+        auto itFinished = finishedProcesses.find(name);
+        if (itFinished != finishedProcesses.end()) {
+            processData = itFinished->second;
+            isFinished = true;
+        }
+    }
+
+    if (!processData) {
         std::cout << "Screen '" << name << "' not found." << std::endl;
         return;
     }
 
-    Process* processData = getProcessMutable(name);
-    if (!processData) {
-        std::cout << "Error: Process data for '" << name << "' not found internally (mutable access failed)." << std::endl;
+    if (isFinished) {
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+        std::tm localTime = *std::localtime(&now_c);
+        
+        char timeBuffer[32];
+        std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &localTime);
+        
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> hexDistrib(0x1000, 0xFFFF);
+        uint32_t memAddr = hexDistrib(gen);
+        
+        std::cout << "Process " << name << " shut down due to memory access violation error that occurred at " 
+                  << timeBuffer << ". 0x" << std::hex << std::uppercase << memAddr << std::dec 
+                  << " invalid." << std::endl;
         return;
     }
 
-    auto it = processConsoleScreens.find(name);
-    if (it != processConsoleScreens.end()) {
-        ProcessConsole* pc = it->second.get();
-        pc->updateProcessData(processData); 
+    auto itScreen = processConsoleScreens.find(name);
+    if (itScreen != processConsoleScreens.end()) {
+        ProcessConsole* pc = itScreen->second.get();
+        pc->updateProcessData(processData);
         setActiveConsole(pc);
     } else {
-        std::cout << "Process data for '" << name << "' found, but console screen not managed. Creating new screen." << std::endl;
+        std::cout << "Creating console for process '" << name << "'." << std::endl;
         processConsoleScreens[name] = std::make_unique<ProcessConsole>(processData);
         setActiveConsole(processConsoleScreens[name].get());
+    }
+}
+
+void ConsoleManager::cleanupTerminatedProcessConsole(const std::string& name) {
+    auto finishedIt = finishedProcesses.find(name);
+    if (finishedIt != finishedProcesses.end()) {
+        auto consoleIt = processConsoleScreens.find(name);
+        if (consoleIt != processConsoleScreens.end()) {
+            processConsoleScreens.erase(consoleIt);
+            std::cout << "Console for terminated process '" << name << "' has been cleaned up." << std::endl;
+        }
+        
     }
 }
 
@@ -241,6 +473,8 @@ void ConsoleManager::batchGenLoop() {
                        (currentSimulatedTime = scheduler->getSimulatedTime()) >= nextBatchTickTarget) {
                     createBatchProcess();
                     nextBatchTickTarget += batchProcessFrequency;
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100)); //Lower for faster batch gen
                 }
             }
         }
@@ -278,9 +512,20 @@ void ConsoleManager::stopBatchGen() {
     }
 }
 
-void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, int batchFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec, uint32_t quantumCyc) {
+void ConsoleManager::initializeSystem(
+    int numCpus,
+    SchedulerAlgorithmType type,
+    int batchFreq,
+    uint32_t minIns,
+    uint32_t maxIns,
+    uint32_t delaysPerExec,
+    uint32_t quantumCyc,
+    uint32_t maxOverallMem,
+    uint32_t memPerFrame,
+    uint32_t minMemPerProc,
+    uint32_t maxMemPerProc
+) {
     if (schedulerStarted.load()) {
-        std::cout << "Scheduler is already running. Please stop it before re-initializing." << std::endl;
         return;
     }
 
@@ -294,7 +539,6 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
 
     scheduler = std::make_unique<Scheduler>(numCpus);
     scheduler->setAlgorithmType(type);
-
     scheduler->setDelaysPerExecution(delaysPerExec);
     scheduler->setQuantumCycles(quantumCyc);
 
@@ -302,57 +546,57 @@ void ConsoleManager::initializeSystem(int numCpus, SchedulerAlgorithmType type, 
     this->maxInstructionsPerProcess = maxIns;
     this->processDelayPerExecution = delaysPerExec;
     this->quantumCycles = quantumCyc;
+    this->maxOverallMemory = maxOverallMem;
+    this->memoryPerFrame = memPerFrame;
+    this->minMemoryPerProcess = minMemPerProc;
+    this->maxMemoryPerProcess = maxMemPerProc;
 
+    memoryAllocator = std::make_unique<DemandPagingAllocator>(maxOverallMemory, memoryPerFrame, DemandPagingAllocator::PageReplacementPolicy::FIFO);
     batchProcessFrequency = batchFreq;
 
     if (scheduler) {
+        scheduler->setProcessTerminationCallback([this](std::shared_ptr<Process> proc) {
+            std::string name = proc->getProcessName();
+
+            auto it = processes.find(name);
+            if (it != processes.end()) {
+                if (memoryAllocator) {
+                    memoryAllocator->deallocate(it->second);
+                }
+                finishedProcesses[name] = it->second;
+                processes.erase(it);
+            }
+
+            auto consoleIt = processConsoleScreens.find(name);
+            if (consoleIt != processConsoleScreens.end()) {
+                auto finishedProcessIt = finishedProcesses.find(name);
+                if (finishedProcessIt != finishedProcesses.end()) {
+                    consoleIt->second->updateProcessData(finishedProcessIt->second);
+                }
+                
+                if (activeConsole != consoleIt->second.get()) {
+                    processConsoleScreens.erase(consoleIt);
+                }
+            }
+        });
+
         nextBatchTickTarget = scheduler->getSimulatedTime() + batchProcessFrequency;
     } else {
-        nextBatchTickTarget = batchProcessFrequency; 
+        nextBatchTickTarget = batchProcessFrequency;
     }
 
-    std::cout << "System initialized with " << numCpus << " CPUs and scheduler type: ";
-    switch(type) {
-        case SchedulerAlgorithmType::fcfs:
-            std::cout << "FCFS";
-            break;
-        case SchedulerAlgorithmType::rr:
-            std::cout << "Round Robin";
-            break;
-        case SchedulerAlgorithmType::NONE:
-            std::cout << "NONE (algorithm not set)";
-            break;
-    }
-    std::cout << "." << std::endl;
-
-    if (batchProcessFrequency > 0) {
-        std::cout << "Batch process generation configured to run every " << batchProcessFrequency << " Scheduler Cycles." << std::endl;
-    } else {
-        std::cout << "Batch process generation is disabled." << std::endl;
-    }
-
-    std::cout << "Process instruction range: [" << minIns << ", " << maxIns << "] instructions/process." << std::endl;
-    if (delaysPerExec == 0) {
-        std::cout << "Delay per instruction execution set to 0 CPU cycle. Will default to 1 CPU cycle." << std::endl;
-    } else {
-        std::cout << "Delay per instruction execution: " << delaysPerExec << " CPU cycles." << std::endl;
-    }
-    std::cout << "Quantum cycles for Round Robin: " << quantumCycles << " CPU cycles." << std::endl;
 }
 
 void ConsoleManager::startScheduler() {
-    if (schedulerStarted.load()) {
-        std::cout << "Scheduler is already running." << std::endl;
-        return;
-    }
-
     if (!scheduler || scheduler->getAlgorithmType() == SchedulerAlgorithmType::NONE) {
         std::cerr << "Error: Scheduler is not initialized or algorithm is not set. Use 'initialize' command first." << std::endl;
         return;
     }
 
-    scheduler->start();
-    schedulerStarted.store(true);
+    if (!schedulerStarted.load()) {
+        scheduler->start();
+        schedulerStarted.store(true);
+    }
 
     if (batchProcessFrequency > 0) {
         startBatchGen();
@@ -360,22 +604,12 @@ void ConsoleManager::startScheduler() {
 }
 
 void ConsoleManager::stopScheduler() {
-
     if (schedulerStarted.load()) {
         stopBatchGen();
 
         if (scheduler) {
             scheduler->stop();
             schedulerStarted.store(false);
-        } else {
-        }
-
-        for (auto& pair : processes) {
-            Process& p = pair.second;
-            if (p.getStatus() == ProcessStatus::RUNNING) {
-                p.setStatus(ProcessStatus::PAUSED);
-                p.setCpuCoreExecuting(-1);
-            }
         }
 
     } else if (!scheduler) {
@@ -383,15 +617,14 @@ void ConsoleManager::stopScheduler() {
     }
 }
 
-
 Scheduler* ConsoleManager::getScheduler() const {
     return scheduler.get();
 }
 
-std::vector<Process*> ConsoleManager::getProcesses() const {
-    std::vector<Process*> processList;
-    for (const auto& pair : processes) {
-        processList.push_back(const_cast<Process*>(&pair.second));  // Add process pointer to the list
+std::vector<std::shared_ptr<Process>> ConsoleManager::getProcesses() const {
+    std::vector<std::shared_ptr<Process>> list;
+    for (const auto& [_, proc] : processes) {
+        list.push_back(proc);
     }
-    return processList;
+    return list;
 }

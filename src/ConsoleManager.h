@@ -4,6 +4,10 @@
 #include "console/MainConsole.h"
 #include "core/Process.h"
 #include "core/Scheduler.h"
+#include "memory/IMemoryAllocator.h"
+#include "memory/FlatMemoryAllocator.h"
+#include "memory/DemandPagingAllocator.h"
+#include "memory/BackingStore.h"
 
 #include <string>
 #include <map>
@@ -21,6 +25,7 @@ class Scheduler;
 
 class ConsoleManager {
 private:
+    std::queue<std::shared_ptr<Process>> pendingProcesses;
     static ConsoleManager* instance;
     ConsoleManager();
     ConsoleManager(const ConsoleManager&) = delete; 
@@ -30,7 +35,12 @@ private:
 
     bool exitApp;
 
-    std::map<std::string, Process> processes;
+    std::map<std::string, std::shared_ptr<Process>> processes;
+    std::map<std::string, std::shared_ptr<Process>> finishedProcesses;
+
+public:
+    const std::queue<std::shared_ptr<Process>>& getPendingProcesses() const { return pendingProcesses; }
+    const std::map<std::string, std::shared_ptr<Process>>& getFinishedProcesses() const { return finishedProcesses; }
 
     std::map<std::string, std::unique_ptr<ProcessConsole>> processConsoleScreens;
 
@@ -49,10 +59,19 @@ private:
     uint32_t maxInstructionsPerProcess;
     uint32_t processDelayPerExecution;
     uint32_t quantumCycles;
+    uint32_t maxOverallMemory;
+    uint32_t memoryPerFrame;
+    uint32_t minMemoryPerProcess;
+    uint32_t maxMemoryPerProcess;
 
+    std::unique_ptr<DemandPagingAllocator> memoryAllocator;
+
+public:
+    IMemoryAllocator* getMemoryAllocator() const { return memoryAllocator.get(); }
     void createBatchProcess();   
     void batchGenLoop();        
     void startBatchGen();
+    
 public:
     static ConsoleManager* getInstance(); 
     static void cleanupInstance();
@@ -64,15 +83,31 @@ public:
     void setExitApp(bool val);
     bool getExitApp() const; 
 
-    void initializeSystem(int numCpus, SchedulerAlgorithmType algoType, int batchProcessFreq, uint32_t minIns, uint32_t maxIns, uint32_t delaysPerExec, uint32_t quantumCyc);
+    void initializeSystem(
+    int numCpus,
+    SchedulerAlgorithmType algoType,
+    int batchProcessFreq,
+    uint32_t minIns,
+    uint32_t maxIns,
+    uint32_t delaysPerExec,
+    uint32_t quantumCyc,
+    uint32_t maxOverallMem,
+    uint32_t memPerFrame,
+    uint32_t minMemPerProc,
+    uint32_t maxMemPerProc
+    );
 
     bool createProcessConsole(const std::string& name);
+    bool createProcessConsole(const std::string& name, uint32_t memorySize);
+    bool createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions);
+    bool createCustomProcessConsole(const std::string& name, const std::vector<std::string>& instructions, uint32_t memorySize);
     void switchToProcessConsole(const std::string& name);
+    void cleanupTerminatedProcessConsole(const std::string& name);
     bool doesProcessExist(const std::string& name) const;
-    const Process* getProcess(const std::string& name) const;
-    Process* getProcessMutable(const std::string& name);
-    const std::map<std::string, Process>& getAllProcesses() const;
-    std::vector<Process*> getProcesses() const;
+    std::shared_ptr<const Process> getProcess(const std::string& name) const;
+    std::shared_ptr<Process> getProcessMutable(const std::string& name);
+    const std::map<std::string, std::shared_ptr<Process>>& getAllProcesses() const;
+    std::vector<std::shared_ptr<Process>> getProcesses() const;
 
     std::unique_ptr<MainConsole> mainConsole;
     AConsole* getMainConsole() const;

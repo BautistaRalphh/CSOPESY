@@ -1,12 +1,13 @@
 #include "ProcessConsole.h"
 #include "ConsoleManager.h"
 #include "core/Process.h"  
+#include "memory/DemandPagingAllocator.h"
 
 #include <iostream>
 #include <iomanip>          
 #include <cstdlib>
 
-ProcessConsole::ProcessConsole(Process* processData) 
+ProcessConsole::ProcessConsole(std::shared_ptr<Process> processData) 
     : AConsole(processData->getProcessName()), currentProcessData(processData) {}
 
 void ProcessConsole::onEnabled() {
@@ -22,7 +23,7 @@ void ProcessConsole::display() {
 
 void ProcessConsole::handleCommand(const std::string& command) {
     if (command == "process-smi") {
-        Process* latestData = ConsoleManager::getInstance()->getProcessMutable(currentProcessData->getProcessName());
+        std::shared_ptr<Process> latestData = ConsoleManager::getInstance()->getProcessMutable(currentProcessData->getProcessName());
         if (latestData) {
             updateProcessData(latestData); 
         }
@@ -31,6 +32,10 @@ void ProcessConsole::handleCommand(const std::string& command) {
     } else if (command == "exit") {
         std::cout << "Exiting process screen for " << currentProcessData->getProcessName() << std::endl;
         std::cout << std::flush;
+
+        if (currentProcessData->getStatus() == ProcessStatus::TERMINATED) {
+            ConsoleManager::getInstance()->cleanupTerminatedProcessConsole(currentProcessData->getProcessName());
+        }
 
         ConsoleManager::getInstance()->setActiveConsole(ConsoleManager::getInstance()->getMainConsole());
     } else {
@@ -56,6 +61,24 @@ void ProcessConsole::displayProcessInfo() {
     std::cout << "Total Commands: " << currentProcessData->getTotalInstructionLines() << std::endl;
     std::cout << "Creation Time: " << currentProcessData->getCreationTime() << std::endl;
     std::cout << "Finish Time: " << currentProcessData->getFinishTime() << std::endl;
+    std::cout << "Memory Required: " << currentProcessData->getMemoryRequired() << " bytes" << std::endl;
+    std::cout << "Pages Allocated: " << currentProcessData->getPagesAllocated() << std::endl;
+    
+    // Get additional memory information from the memory allocator
+    auto* memoryAllocator = ConsoleManager::getInstance()->getMemoryAllocator();
+    if (memoryAllocator) {
+        // Try to cast to DemandPagingAllocator to access specific methods
+        auto* demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator);
+        if (demandPagingAllocator) {
+            std::string pid = currentProcessData->getPid();
+            int pagesInPhysical = demandPagingAllocator->getPagesInPhysicalMemory(pid);
+            int pagesInBacking = demandPagingAllocator->getPagesInBackingStore(pid);
+            
+            std::cout << "Pages in Physical Memory: " << pagesInPhysical << std::endl;
+            std::cout << "Pages in Backing Store: " << pagesInBacking << std::endl;
+        }
+    }
+    
     std::cout << "\033[0m";
     std::cout << std::endl;
 
@@ -78,6 +101,6 @@ void ProcessConsole::displayProcessInfo() {
     }
 }
 
-void ProcessConsole::updateProcessData(Process* newData) {
+void ProcessConsole::updateProcessData(std::shared_ptr<Process> newData) {
     currentProcessData = newData; 
 }

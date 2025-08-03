@@ -29,7 +29,9 @@ enum class CommandType {
     SUBTRACT,
     SLEEP,
     FOR,
-    END_FOR
+    END_FOR,
+    WRITE,
+    READ
 };
 
 struct ParsedCommand {
@@ -66,11 +68,13 @@ private:
     ProcessStatus status;
     int cpuCoreExecuting;
     std::string finishTime;
-
+    uint32_t memoryRequired = 0;
+    uint32_t pagesAllocated = 0;
     std::vector<std::string> splitInstructions(const std::string& block);
     std::string trim(const std::string& str);
 
     std::map<std::string, uint16_t> variables;
+    std::map<uint32_t, uint16_t> memory; 
     std::vector<std::string> executionLog;
 
     std::stack<LoopContext> loopStack;
@@ -111,6 +115,10 @@ public:
     bool getVariableValue(const std::string& varName, uint16_t& value) const;
     void setVariableValue(const std::string& varName, uint16_t value);
 
+    // Memory operations
+    void writeMemory(uint32_t address, uint16_t value);
+    uint16_t readMemory(uint32_t address);
+
     void addLogEntry(const std::string& log);
     const std::vector<std::string>& getLogEntries() const;
 
@@ -121,4 +129,8 @@ public:
     void setWakeUpTime(long long time);
     long long getWakeUpTime() const;
     bool isLoopStackEmpty() const { return loopStack.empty(); } 
+
+    void setMemory(uint32_t mem, uint32_t pages);
+    uint32_t getMemoryRequired() const;
+    uint32_t getPagesAllocated() const;
 };
