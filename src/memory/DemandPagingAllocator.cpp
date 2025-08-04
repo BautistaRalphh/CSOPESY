@@ -21,30 +21,34 @@ DemandPagingAllocator::DemandPagingAllocator(size_t totalMemorySize, size_t fram
 void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
     std::string pid = process->getPid();
     uint32_t memoryRequired = process->getMemoryRequired();
-    uint32_t pagesNeeded = (memoryRequired + frameSize - 1) / frameSize; // Calculate pages from memory requirement
+    uint32_t pagesNeeded = (memoryRequired + frameSize - 1) / frameSize; 
     
-    // Check if we have enough free frames
-    if (freeFrames.size() < pagesNeeded) {
-        //std::cout << "[MEMORY] Allocation failed for process " << pid << " - not enough free frames. Need: " << pagesNeeded << ", Available: " << freeFrames.size() << std::endl;
+    uint32_t initialPages = std::min(pagesNeeded, static_cast<uint32_t>(1));
+    
+    if (freeFrames.size() < initialPages) {
         return nullptr;
     }
     
     pageTables[pid] = std::unordered_map<int, int>();
     
     auto it = freeFrames.begin();
-    for (uint32_t i = 0; i < pagesNeeded; ++i) {
+    for (uint32_t i = 0; i < initialPages; ++i) {
         int frameIndex = *it;
         it = freeFrames.erase(it);
         
         pageTables[pid][i] = frameIndex;
         frameTable[frameIndex] = PageInfo{pid, static_cast<int>(i)};
-        
-        totalPagesPagedIn.fetch_add(1);
-        
 
         if (policy == PageReplacementPolicy::FIFO) {
             fifoQueue.push_back(PageInfo{pid, static_cast<int>(i)});
         }
+    }
+    
+    for (uint32_t i = initialPages; i < pagesNeeded; ++i) {
+        std::vector<uint8_t> dummyData(frameSize, 0xAA + (i % 10)); 
+        BackingStore::pageOut(pid, i, dummyData);
+        totalPagesPagedOut.fetch_add(1);
+        //std::cout << "[DEBUG] Writing page " << i << " of process " << pid << " to backing store" << std::endl;
     }
     
     process->setMemory(memoryRequired, pagesNeeded);
@@ -54,9 +58,6 @@ void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
 void DemandPagingAllocator::deallocate(std::shared_ptr<Process> process) {
     std::string pid = process->getPid();
     if (pageTables.count(pid)) {
-        for (auto& entry : pageTables[pid]) {
-            totalPagesPagedOut.fetch_add(1);
-        }
         
         for (auto& entry : pageTables[pid]) {
             int frameIndex = entry.second;
@@ -92,7 +93,6 @@ void DemandPagingAllocator::visualizeMemory() const {
 
 bool DemandPagingAllocator::accessMemory(const std::string& pid, int pageNumber) {
     if (pageTables[pid].count(pageNumber)) {
-        
         if (policy == PageReplacementPolicy::LRU) {
             lruTimestamps[pid][pageNumber] = std::chrono::steady_clock::now().time_since_epoch().count();
         }
