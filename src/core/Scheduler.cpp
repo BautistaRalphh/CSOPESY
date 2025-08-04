@@ -9,7 +9,9 @@
 #include <fstream>
 #include "ConsoleManager.h"
 #include "memory/FlatMemoryAllocator.h"
+#include "memory/DemandPagingAllocator.h"
 #include <memory>
+#include <random>
 
 constexpr long long REAL_TIME_TICK_DURATION_MS = 50; //Lower for much faster processes
 
@@ -332,6 +334,24 @@ bool Scheduler::executeSingleCommand(std::shared_ptr<Process> proc, int coreId) 
                 
                 commandToLog = "PRINT " + printStr;
                 proc->addLogEntry(log.str() + commandToLog);
+                
+                auto consoleManager = ConsoleManager::getInstance();
+                if (consoleManager) {
+                    auto allocator = consoleManager->getMemoryAllocator();
+                    if (allocator) {
+                        auto* demandAllocator = dynamic_cast<DemandPagingAllocator*>(allocator);
+                        if (demandAllocator) {
+                            uint32_t totalPages = proc->getPagesAllocated();
+                            if (totalPages > 0) {
+                                static std::random_device rd;
+                                static std::mt19937 gen(rd());
+                                std::uniform_int_distribution<int> pageDist(0, totalPages - 1);
+                                int pageToAccess = pageDist(gen);
+                                demandAllocator->accessMemory(proc->getPid(), pageToAccess);
+                            }
+                        }
+                    }
+                }
             }
             commandExecuted = true;
             break;

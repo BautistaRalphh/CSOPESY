@@ -4,6 +4,7 @@
 #include "core/Scheduler.h"
 #include "core/Process.h"
 #include "memory/DemandPagingAllocator.h"
+#include "memory/BackingStore.h"
 
 #include <regex>
 #include <iomanip>
@@ -125,7 +126,6 @@ void MainConsole::handleCommand(const std::string& command) {
                 return;
             }
 
-            // Memory-related 
             uint32_t maxOverallMem = 0, memPerFrame = 0, minMemPerProc = 0, maxMemPerProc = 0;
 
             try {
@@ -173,6 +173,9 @@ void MainConsole::handleCommand(const std::string& command) {
                 minIns, maxIns, delaysPerExec, quantumCycles
                 , maxOverallMem, memPerFrame, minMemPerProc, maxMemPerProc
             );
+
+            std::ofstream ofs("csopesy-backing-store.txt", std::ofstream::out | std::ofstream::trunc);
+            ofs.close();
 
             initialized = true;
         } else {
@@ -226,7 +229,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
             }
         }
         
-        // Create process with custom instructions and memory size
         bool created = ConsoleManager::getInstance()->createCustomProcessConsole(processName, instructions, memorySize);
         if (created) {
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
@@ -234,8 +236,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
     } else if (std::regex_match(command, match, screen_cmd_regex)) {
         std::string option = match[1].str(); 
         std::string processName = match[2].str();
-        std::ofstream ofs("csopesy-backing-store.txt", std::ofstream::out | std::ofstream::trunc);
-        ofs.close();
 
         if (option == "-r") {
             ConsoleManager::getInstance()->switchToProcessConsole(processName);
@@ -243,9 +243,6 @@ void MainConsole::handleMainCommands(const std::string& command) {
     } else if (std::regex_match(command, match, screen_s_regex)) {
         std::string processName = match[1].str();
         std::string memorySizeStr = match[2].str(); 
-        
-        std::ofstream ofs("csopesy-backing-store.txt", std::ofstream::out | std::ofstream::trunc);
-        ofs.close();
         
         uint32_t memorySize = 0;
         
@@ -508,18 +505,29 @@ void MainConsole::handleMainCommands(const std::string& command) {
             pendingCopy.pop();
         }
         
-        uint32_t totalMemoryUsed = 0;
+        uint32_t actualMemoryUsed = 0;
         uint32_t totalPagesAllocated = 0;
+        uint32_t framesInUse = 0; // Count actual frames in physical memory
         
         for (const auto& process : allProcesses) {
             uint32_t pagesAlloc = process->getPagesAllocated();
-            if (pagesAlloc > 0) {
-                totalMemoryUsed += process->getMemoryRequired();
+            if (pagesAlloc > 0 && process->getStatus() != ProcessStatus::TERMINATED) {
+                // Only count memory from non-terminated processes
                 totalPagesAllocated += pagesAlloc;
+                
+                // Count frames actually in physical memory for memory calculation
+                if (auto demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator)) {
+                    uint32_t pagesInMemory = demandPagingAllocator->getPagesInPhysicalMemory(process->getPid());
+                    framesInUse += pagesInMemory;
+                    actualMemoryUsed += pagesInMemory * frameSize; // Memory = pages in memory * frame size
+                } else {
+                    framesInUse += pagesAlloc; // For non-demand paging, all pages are in memory
+                    actualMemoryUsed += process->getMemoryRequired();
+                }
             }
         }
         
-        uint32_t usedMemory = totalMemoryUsed;
+        uint32_t usedMemory = actualMemoryUsed;
         uint32_t freeMemory = totalMemory - usedMemory;
         
         long long totalCpuTicks = 0;
@@ -592,18 +600,27 @@ void MainConsole::handleMainCommands(const std::string& command) {
             pendingCopy.pop();
         }
         
-        uint32_t totalMemoryUsed = 0;
+        uint32_t actualMemoryUsed = 0;
         uint32_t totalPagesAllocated = 0;
+        uint32_t framesInUse = 0; 
         
         for (const auto& process : allProcesses) {
             uint32_t pagesAlloc = process->getPagesAllocated();
-            if (pagesAlloc > 0) {
-                totalMemoryUsed += process->getMemoryRequired();
+            if (pagesAlloc > 0 && process->getStatus() != ProcessStatus::TERMINATED) {
                 totalPagesAllocated += pagesAlloc;
+                
+                if (auto demandPagingAllocator = dynamic_cast<DemandPagingAllocator*>(memoryAllocator)) {
+                    uint32_t pagesInMemory = demandPagingAllocator->getPagesInPhysicalMemory(process->getPid());
+                    framesInUse += pagesInMemory;
+                    actualMemoryUsed += pagesInMemory * frameSize; 
+                } else {
+                    framesInUse += pagesAlloc;
+                    actualMemoryUsed += process->getMemoryRequired();
+                }
             }
         }
         
-        uint32_t usedMemory = totalMemoryUsed;
+        uint32_t usedMemory = actualMemoryUsed;
         uint32_t freeMemory = totalMemory - usedMemory;
         
         long long pagesPagedIn = 0;
@@ -681,10 +698,13 @@ void MainConsole::handleMainCommands(const std::string& command) {
         
         std::cout << std::string(120, '-') << std::endl;
         std::cout << " Total Pages Allocated: " << totalPagesAllocated << std::endl;
-        std::cout << " Frame Utilization: " << totalPagesAllocated << "/" << totalFrames 
+        std::cout << " Frames in Use: " << framesInUse << std::endl;
+        std::cout << " Frame Utilization: " << framesInUse << "/" << totalFrames 
                   << " (" << std::fixed << std::setprecision(2) 
-                  << (static_cast<double>(totalPagesAllocated) / totalFrames * 100.0) << "%)" << std::endl;
+                  << (static_cast<double>(framesInUse) / totalFrames * 100.0) << "%)" << std::endl;
         
+    } else if (command == "backing-store") {
+        BackingStore::displayStatus();
     } else if (command == "clear") {
         onEnabled(); 
     } else {
