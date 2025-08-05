@@ -674,12 +674,12 @@ void Scheduler::_runRoundRobinLogic(std::unique_lock<std::mutex>& lock) {
 
         if (allocated) {
             globalQueue.push(proc);
-            proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
-                             " (PID:" + proc->getPid() + ") memory allocated, added to RR Global Queue.");
+            //proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
+                             //" (PID:" + proc->getPid() + ") memory allocated, added to RR Global Queue.");
         } else {
             rrPendingQueue.push(proc);
-            proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
-                             " (PID:" + proc->getPid() + ") failed memory allocation. Remaining in pending queue.");
+            //proc->addLogEntry("(" + getCurrentTimestamp() + ") Process " + proc->getProcessName() +
+                             //" (PID:" + proc->getPid() + ") failed memory allocation. Remaining in pending queue.");
         }
     }
 
