@@ -23,6 +23,10 @@ void* DemandPagingAllocator::allocate(std::shared_ptr<Process> process) {
     uint32_t memoryRequired = process->getMemoryRequired();
     uint32_t pagesNeeded = (memoryRequired + frameSize - 1) / frameSize; 
     
+    if (pagesNeeded > totalFrames) {
+        return nullptr;
+    }
+    
     uint32_t initialPages = std::min(pagesNeeded, static_cast<uint32_t>(1));
     
     if (freeFrames.size() < initialPages) {
